@@ -60,6 +60,7 @@ Everything hangs off the Pi 4's 40-pin header. The I2S pins (18/19/20/21) are sh
 | V+ | 5 V rail | | **servo power from the supply, not the Pi** |
 | ch 0 | pan servo | | `GHOST_SERVO_PAN` |
 | ch 1 | tilt servo | | `GHOST_SERVO_TILT` |
+| ch 2 | shell spool servo (in the base, on `shell_servo_mount`) | | `GHOST_SERVO_SHELL` |
 
 Everything shares one ground.
 
@@ -78,6 +79,8 @@ Wires that must reach the head (share the power/ground lines):
 | Mic: SCK, WS, SD | 3 |
 | LED: DIN | 1 |
 | **Total** | **13** |
+
+Plus the 4 mm Bowden tube for the shell, which runs alongside the ribbon in the arm channel and through the head mount into the core.
 
 A 16-way ribbon or a bundle of 28 AWG silicone wire fits the 8×6 mm channel down the back of the arm and the 10 mm cable slot in the lid. Leave a 60 mm service loop at the tilt joint so the head can move.
 

@@ -187,6 +187,7 @@ class Ghost:
                 self.wake.reset()
                 self.speaker.chime("wake")
                 self.body.gesture("lean_in")
+                self.body.gesture("flare", -1)     # the scan: shell snaps open, then settles
             # ---- listening
             self.mood("listening")
             audio = self.mic.record_utterance(on_level=lambda r: self.eye.set(listening_level=min(1.0, r * 25)))

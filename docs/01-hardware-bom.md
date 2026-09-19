@@ -17,7 +17,11 @@ Prices are typical 2026 US street prices. Total is roughly **$140–170** plus f
 | 8 | **INMP441** I2S MEMS microphone breakout | 1 | $5 | Mounted in the head behind the vent holes |
 | 9 | NeoPixel / WS2812B ring, **16 LEDs, 44 mm OD** | 1 | $8 | Glows through the eye bezel |
 | 10 | **PCA9685** 16-channel PWM servo driver (I2C) | 1 | $6 | Jitter-free servos, works on any Pi |
-| 11 | **MG90S** metal-gear micro servo | 2 | $8 | Pan + tilt. SG90 fits the same pocket but strips faster |
+| 11 | **MG90S** metal-gear micro servo | 3 | $12 | Pan, tilt, and the shell spool in the base. SG90 fits the same pockets but strips faster |
+| 11a | Compression springs, **12 mm OD × 25 mm free length, 0.4–0.5 mm wire** | 8 | $6 | Push the shell open. A cheap assortment box has them |
+| 11b | Braided fishing line, 20–30 lb | 2 m | $5 | The eight tendons inside the core |
+| 11c | PTFE Bowden tube, **2 mm ID / 4 mm OD** | 0.5 m | $3 | 3D-printer Bowden tube. Sheath from the base up to the core |
+| 11d | Bowden inner wire: 1 mm stainless wire or 0.8 mm braided line | 0.5 m | $2 | Runs inside the sheath, pulls the spider ring |
 | 12 | 74AHCT125 level shifter | 1 | $2 | Optional but recommended for the LED data line |
 | 13 | 1000 µF ≥6.3 V electrolytic capacitor | 1 | $1 | Across 5 V/GND at the LED ring |
 | 14 | 470 Ω resistor | 1 | — | In series with LED data |
@@ -35,7 +39,7 @@ Prices are typical 2026 US street prices. Total is roughly **$140–170** plus f
 
 | Part | Qty | Used for |
 |------|-----|----------|
-| M2 × 6 mm self-tapping screws | 10 | Core halves (3), servo tabs (4), servo horns (3) |
+| M2 × 6 mm self-tapping screws | 12 | Core halves (3), servo tabs (4), servo horns (3), spool to horn (1) |
 | M2.5 × 6 mm screws | 4 | Pi to the standoffs in the base |
 | M3 × 10 mm screws | 4 | Base lid |
 | Servo horn screws (come with the servos) | — | |
@@ -45,11 +49,12 @@ Prices are typical 2026 US street prices. Total is roughly **$140–170** plus f
 
 ## Filament
 
-About **460 g** total.
+About **500 g** total.
 
 | Colour | Parts | ~Grams |
 |--------|-------|--------|
 | Silver / light grey PLA or PETG | 8 × shell piece | 240 |
+| Any (hidden) | 8 × slider pin, spider ring, spool, shell servo mount | 45 |
 | Black or dark grey | core_front, core_back, arm, head_mount, base, base_lid | 215 |
 | White or natural/translucent | eye_bezel | 8 |
 

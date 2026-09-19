@@ -32,19 +32,22 @@ All of it is in `software/ghost/personality.py`. The system prompt tells Claude 
 
 Every reply starts with a tag like `[curious]` and may change mid-reply. The tags are stripped before speech and drive:
 
-| tag | eye | LED ring | body |
-|---|---|---|---|
-| neutral | steady blue, slow breathing, blinks | soft glow | idle drift |
-| happy | squashed "smile" | brighter | bounce |
-| excited | big and bright | pulsing | wiggle |
-| curious | tall, tilted | steady | head tilt |
-| thinking | spinner arcs | chasing light | look up |
-| worried | small, purple-blue | dim | shrink back |
-| sad | dim, drooping | dark blue | droop |
-| surprised | wide, white | flash | recoil |
-| annoyed | narrow, orange | orange | head shake |
-| smug | half-lidded | steady | tilt |
-| sleepy | thin line | very dim | droop |
+| tag | eye | LED ring | head | shell |
+|---|---|---|---|---|
+| neutral | steady blue, slow breathing, blinks | soft glow | idle drift | closed |
+| happy | squashed "smile" | brighter | bounce | 40 % |
+| excited | big and bright | pulsing | wiggle | open |
+| curious | tall, tilted | steady | head tilt | half |
+| thinking | spinner arcs | chasing light | look up | open (scanning) |
+| worried | small, purple-blue | dim | shrink back | closed |
+| sad | dim, drooping | dark blue | droop | closed |
+| surprised | wide, white | flash | recoil | open |
+| annoyed | narrow, orange | orange | head shake | closed |
+| smug | half-lidded | steady | tilt | 30 % |
+| sleepy | thin line | very dim | droop | closed |
+| listening | bright, rippling | pulsing | lean in | 60 % |
+
+Waking to "Hey Ghost" also fires the **scan flare**: the shell snaps fully open for half a second and settles back.
 
 ![eye moods](eye_moods.png)
 

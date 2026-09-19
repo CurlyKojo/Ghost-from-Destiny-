@@ -10,8 +10,12 @@ The shell is built straight from the Bungie reference sheet: the same 8 pieces, 
 
 ![reference vs generated](docs/reference_vs_generated.png)
 
-- **Print it** — 8 STL files, ~460 g of filament, ~28 h of printing. 180 mm tip to tip. Parametric generator included.
-- **Build it** — Raspberry Pi 4, a round 1.28" LCD for the eye, I2S mic + amp, a 16-LED ring, two servos for pan/tilt. About $150.
+The shell opens: each piece rides a spring-loaded pin in the core, eight tendons meet at a ring on the eye axis, and a Bowden cable to a servo in the base pulls them shut.
+
+![open](hardware/preview_open.png)
+
+- **Print it** — 12 STL files, ~500 g of filament, ~32 h of printing. 190 mm tip to tip closed, 210 mm open. Parametric generator included.
+- **Build it** — Raspberry Pi 4, a round 1.28" LCD for the eye, I2S mic + amp, a 16-LED ring, three servos: pan, tilt, and a spool in the core that lets the shell **spread open like the in-game scan**. About $165.
 - **Run it** — wake word + speech-to-text run offline on the Pi; the personality is Claude with emotion tags that drive the eye, the lights and the body; the voice is Piper with a "Ghost" filter chain.
 
 ## Repo layout
@@ -19,7 +23,9 @@ The shell is built straight from the Bungie reference sheet: the same 8 pieces, 
 ```
 hardware/
   generate_stl.py      parametric generator (trimesh) - every dimension is a parameter
-  stl/                 fin_x8, core_front, core_back, eye_bezel, arm, head_mount, base, base_lid
+  stl/                 fin_x8, slider_pin_x8, spider_ring, spool, shell_servo_mount,
+                       core_front, core_back, eye_bezel, arm, head_mount, base, base_lid
+  preview_open.png     shell spread open
   preview.png          assembled render (front / side / top)
   parts.png            every part in print orientation
 docs/

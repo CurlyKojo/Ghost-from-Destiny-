@@ -96,6 +96,9 @@ class Config:
     servos: bool = _env("GHOST_SERVOS", True)
     servo_pan_ch: int = _env("GHOST_SERVO_PAN", 0)
     servo_tilt_ch: int = _env("GHOST_SERVO_TILT", 1)
+    servo_shell_ch: int = _env("GHOST_SERVO_SHELL", 2)   # tendon spool in the core
+    shell_closed_angle: float = _env("GHOST_SHELL_CLOSED", 160.0)  # spool wound: pieces pulled in
+    shell_open_angle: float = _env("GHOST_SHELL_OPEN", 20.0)       # spool released: springs push out
     pan_center: float = _env("GHOST_PAN_CENTER", 90.0)
     tilt_center: float = _env("GHOST_TILT_CENTER", 90.0)
     pan_range: float = _env("GHOST_PAN_RANGE", 45.0)    # +- degrees from centre

@@ -36,13 +36,35 @@ P = dict(
     inner_front=(26.0, 28.0),  # (y, z) of the inner-front corner on the ridge, beside the bezel
     inner_back=44.0,      # distance of the inner-back corner (on the seam plane)
     piece_gap=0.975,      # each piece scaled about its centroid -> ~2 mm seams
-    fin_socket_r=5.4,     # socket hole for the core peg
-    fin_socket_depth=10.0,
+    # Spreading shell mechanism ---------------------------------------------
+    # Each piece is glued onto a slider pin that runs in a guide tube in the core.  A
+    # compression spring on the pin pushes the piece OUT; a fishing-line tendon from the
+    # pin's inner cap to a spool on a servo in the core pulls it back IN.
+    # The eight tendons tie to a small SPIDER RING on the eye axis inside the core.  A
+    # Bowden cable (PTFE sheath + wire) runs from the ring out through the hollow neck,
+    # down the arm, to a spool on a servo in the base.  Pulling the ring backward closes
+    # all eight pieces at once; the generator prints the ring travel and tendon lengths.
+    closed_gap=8.0,       # piece-to-core gap along the ray when closed (spring nearly solid)
+    shell_travel=12.0,    # how far each piece slides out when the shell opens
+    pin_r=4.8,            # slider pin
+    pin_cap_r=6.0,        # cap on the pin's inner end: stop against the guide tube + tendon anchor
+    pin_cap_t=3.0,
+    sleeve_r=5.15,        # guide bore for the pin (0.35 mm clearance)
+    sleeve_or=7.5,        # guide tube outer radius (inside the core)
+    sleeve_len=6.0,       # guide tube length inward from the inner wall
+    fin_socket_r=5.0,     # socket in the piece for the pin (glue fit)
+    fin_socket_depth=12.0,
+    spring_od=12.5,       # spring counterbore in the piece (12 mm OD spring)
+    ring_r=7.0,           # spider ring
+    ring_t=3.0,
+    ring_tie_r=5.3,       # tendon holes on the ring
+    bowden_r=2.2,         # bore for the 4 mm PTFE sheath's inner wire / sheath seat
+    sheath_r=2.15,        # 4 mm OD PTFE tube (slight clearance)
+    spool_r=8.0,
+    spool_t=6.0,
     # Core (black sphere) ---------------------------------------------------
-    core_r=34.0,
+    core_r=35.0,
     core_wall=3.0,
-    peg_r=5.0,
-    peg_reach=8.0,        # how far the peg goes into the piece socket
     eye_bore_r=23.6,      # bore for the eye bezel tube
     lip_h=5.0,            # joining lip on the back half
     # Eye bezel -------------------------------------------------------------
@@ -56,8 +78,8 @@ P = dict(
     base_r=90.0,
     base_h=32.0,
     base_wall=2.5,
-    base_center_z=-50.0,  # base puck centre sits this far behind the core centre
-    arm_z=-108.0,         # lower arm centreline: clear of the bottom-back piece's tilt sweep
+    base_center_z=-58.0,  # base puck centre sits this far behind the core centre
+    arm_z=-122.0,         # lower arm centreline: clears the bottom-back piece, shell open, at 15 deg
     arm_w=16.0,           # arm cross-section (x)
     arm_d=24.0,           # arm cross-section (z)
     tilt_pivot_z=-70.0,   # tilt axis (parallel to x) sits here behind the core
@@ -209,12 +231,24 @@ def socket_range(p, m):
 
 
 def fin(p):
-    """One shell piece (top-front orientation) with its peg socket bored along the centroid ray."""
+    """One shell piece (top-front orientation) with the pin socket and spring counterbore
+    bored along the centroid ray."""
     m = piece_raw(p)
     r_in, r_out = socket_range(p, m)
     depth = min(p["fin_socket_depth"], (r_out - r_in) - 3.0)
-    sock = cyl_along(piece_axis(m), p["fin_socket_r"], r_in - 1.0, r_in + depth)
-    return m.difference(sock)
+    ax = piece_axis(m)
+    sock = cyl_along(ax, p["fin_socket_r"], r_in - 1.0, r_in + depth)
+    seat = cyl_along(ax, p["spring_od"] / 2.0 + 0.3, r_in - 1.0, r_in + 2.0)
+    return difference(m, [sock, seat])
+
+
+def shell_offset(p, open_frac: float) -> float:
+    """How far (mm) each piece sits out along its ray from the modelled position:
+    closed_gap minus the built-in ~3 mm, plus travel * open_frac."""
+    m = piece_raw(p)
+    r_in, _ = socket_range(p, m)
+    base_gap = r_in - p["core_r"]
+    return (p["closed_gap"] - base_gap) + p["shell_travel"] * open_frac
 
 
 def fin_printable(p):
@@ -228,15 +262,127 @@ def fin_printable(p):
     return m
 
 
-def fins_in_place(p):
-    """All 8 pieces exactly placed on the assembled Ghost (world frame)."""
+def fins_in_place(p, open_frac: float = 0.0):
+    """All 8 pieces placed on the assembled Ghost (world frame), shell closed (0) .. open (1)."""
     base = fin(p)
+    base.apply_translation(piece_axis(piece_raw(p)) * shell_offset(p, open_frac))
     out = []
     for i in range(8):
         m = base.copy()
         m.apply_transform(piece_transform(i))
         out.append(m)
     return out
+
+
+def slider_pin(p):
+    """Pin that carries a shell piece through the core's guide tube.  Print 8, vertical."""
+    m = piece_raw(p)
+    r_in, _ = socket_range(p, m)
+    cap_r0 = p["core_r"] - p["core_wall"] - p["sleeve_len"] - p["shell_travel"] - 2.0  # cap radius (closed)
+    tip_r = p["core_r"] + p["closed_gap"] + p["fin_socket_depth"] - 1.0                # socket bottom (closed)
+    length = tip_r - cap_r0
+    pin = cylinder(radius=p["pin_r"], height=length, sections=48)
+    pin.apply_translation([0, 0, length / 2.0])
+    cap = cylinder(radius=p["pin_cap_r"], height=p["pin_cap_t"], sections=48)
+    cap.apply_translation([0, 0, -p["pin_cap_t"] / 2.0])
+    hole = cyl_along([1, 0, 0], 0.8, -10, 10)           # tendon hole through the cap
+    hole.apply_translation([0, 0, -p["pin_cap_t"] / 2.0])
+    m = pin.union(cap).difference(hole)
+    m.apply_translation([0, 0, p["pin_cap_t"]])
+    return m
+
+
+def spider_ring(p):
+    """The eight tendons tie to this ring; the Bowden wire pulls it backward along the eye axis."""
+    m = cylinder(radius=p["ring_r"], height=p["ring_t"], sections=64)
+    m.apply_translation([0, 0, p["ring_t"] / 2.0])
+    holes = [cylinder(radius=1.3, height=10, sections=16)]           # wire knot / crimp
+    for i in range(8):
+        a = i * math.pi / 4 + math.pi / 8
+        h = cylinder(radius=0.9, height=10, sections=12)
+        h.apply_translation([p["ring_tie_r"] * math.cos(a), p["ring_tie_r"] * math.sin(a), 0])
+        holes.append(h)
+    return difference(m, holes)
+
+
+def shell_servo_mount(p):
+    """Bracket for the shell servo in the base: MG90S lies on its side (shaft along +x), the
+    spool sits on the shaft, and a post 22 mm out holds the end of the Bowden sheath in line
+    with the spool rim so the wire runs straight."""
+    sb = p["servo_body"]
+    blk = box(extents=[16.0, sb[0] + 6.0, sb[1] + 8.0])
+    blk.apply_translation([-8.0, 0, (sb[1] + 8.0) / 2.0])
+    pocket = box(extents=[sb[1] + 0.4, sb[0], 40.0])              # body slides in from the top
+    pocket.apply_transform(rot([0, 1, 0], 90))
+    pocket.apply_translation([-8.0 + 0.0, 0, (sb[1] + 8.0) / 2.0 + 4.0 + 20.0 - 4.0])
+    # simpler: an open-top cradle: cut a channel the width of the body through the block
+    chan = box(extents=[sb[1] + 0.4, sb[0] + 0.4, 40.0])
+    chan.apply_translation([-8.0, 0, 4.0 + 20.0])
+    tabs = []
+    for sy in (1, -1):
+        t = cylinder(radius=p["servo_hole_r"], height=30, sections=16)
+        t.apply_transform(rot([0, 1, 0], 90))
+        t.apply_translation([-8.0, sy * p["servo_hole_spacing"] / 2.0, 4.0 + sb[1] / 2.0])
+        tabs.append(t)
+    foot = box(extents=[52.0, sb[0] + 6.0, 3.0]); foot.apply_translation([10.0, 0, 1.5])
+    post = box(extents=[8.0, 10.0, 4.0 + sb[1] / 2.0 + p["spool_r"] + 3.0])
+    post.apply_translation([32.0, 0, post.extents[2] / 2.0])
+    sheath = cylinder(radius=p["sheath_r"], height=6.0, sections=24)
+    sheath.apply_transform(rot([0, 1, 0], 90))
+    sheath.apply_translation([32.0 + 1.0, 0, 4.0 + sb[1] / 2.0 + p["spool_r"]])
+    wire = cylinder(radius=1.2, height=20.0, sections=16)
+    wire.apply_transform(rot([0, 1, 0], 90))
+    wire.apply_translation([32.0 - 4.0, 0, 4.0 + sb[1] / 2.0 + p["spool_r"]])
+    screws = []
+    for sx in (-8.0, 28.0):
+        for sy in (1, -1):
+            s = cylinder(radius=1.7, height=10, sections=16)
+            s.apply_translation([sx + 12.0, sy * (sb[0] / 2.0 + 1.0), 1.5]); screws.append(s)
+    m = union([blk, foot, post])
+    return difference(m, [chan, sheath, wire] + tabs + screws)
+
+
+def ring_travel(p):
+    """Solve for the ring's open/closed positions on the eye axis such that fixed-length
+    tendons are taut in both states for the front group and the back group.
+    Returns (z_open, z_closed, L_front, L_back)."""
+    from scipy.optimize import fsolve
+    R, wall = p["core_r"], p["core_wall"]
+    cap_open = R - wall - p["sleeve_len"] - p["pin_cap_t"] / 2.0
+    cap_closed = cap_open - p["shell_travel"]
+    d = unit(piece_raw(p).centroid)                 # top-front ray
+    tie = np.array([0.0, p["ring_tie_r"], 0.0])     # tie point on the ring, same azimuth
+    def L(cap_r, z, back):
+        c = d * cap_r
+        if back: c = c * np.array([1, 1, -1])
+        return np.linalg.norm(c - (tie + [0, 0, z]))
+    def eqs(v):
+        z0, z1 = v
+        return [L(cap_open, z0, False) - L(cap_closed, z1, False),
+                L(cap_open, z0, True) - L(cap_closed, z1, True)]
+    z0, z1 = fsolve(eqs, [-10.0, -20.0])
+    return float(z0), float(z1), float(L(cap_open, z0, False)), float(L(cap_open, z0, True)), cap_open, cap_closed
+
+
+def spool(p):
+    """Tendon spool for the shell servo: sits on a stock 20 mm round horn."""
+    base_h = 3.0
+    base_d = cylinder(radius=p["spool_r"] + 4.0, height=base_h, sections=64)   # sits on the horn
+    base_d.apply_translation([0, 0, base_h / 2.0])
+    horn = cylinder(radius=10.3, height=1.8, sections=64)      # pocket for the round horn
+    horn.apply_translation([0, 0, 0.9])
+    body = cylinder(radius=p["spool_r"], height=p["spool_t"], sections=64)
+    body.apply_translation([0, 0, base_h + p["spool_t"] / 2.0])
+    top = cylinder(radius=p["spool_r"] + 3.0, height=1.5, sections=64)
+    top.apply_translation([0, 0, base_h + p["spool_t"] - 0.75])
+    m = union([base_d, body, top])
+    holes = [cylinder(radius=2.2, height=20, sections=24)]      # horn screw
+    for i in range(8):
+        h = cylinder(radius=0.9, height=20, sections=16)
+        h.apply_translation([(p["spool_r"] - 1.8) * math.cos(i * math.pi / 4),
+                             (p["spool_r"] - 1.8) * math.sin(i * math.pi / 4), 0])
+        holes.append(h)
+    return difference(m, [horn] + holes)
 
 
 def peg_dirs(p):
@@ -250,13 +396,14 @@ def core_halves(p):
     R, wall = p["core_r"], p["core_wall"]
     sphere = icosphere(subdivisions=4, radius=R)
     cavity = icosphere(subdivisions=4, radius=R - wall)
-    piece = piece_raw(p)
-    r_in, _ = socket_range(p, piece)
-    peg_end = r_in + p["peg_reach"]
-
     def pegs(front: bool):
+        """Guide tubes for the slider pins: from inside the cavity out to the surface."""
         dirs = [d for d in peg_dirs(p) if (d[2] > 0) == front]
-        return [cyl_along(d, p["peg_r"], R - wall - 1.0, peg_end) for d in dirs]
+        return [cyl_along(d, p["sleeve_or"], R - wall - p["sleeve_len"], R - 0.5) for d in dirs]
+
+    def bores(front: bool):
+        dirs = [d for d in peg_dirs(p) if (d[2] > 0) == front]
+        return [cyl_along(d, p["sleeve_r"], R - wall - p["sleeve_len"] - 1.0, R + 2.0) for d in dirs]
 
     big = box(extents=[4 * R, 4 * R, 2 * R])
     front_keep = big.copy(); front_keep.apply_translation([0, 0, R])
@@ -273,12 +420,15 @@ def core_halves(p):
                        1.1, R - wall - p["lip_h"], R + 1)
         sh.apply_translation([0, 0, p["lip_h"] / 2.0])
         screw_holes.append(sh)
-    front = difference(front, [cavity, bore] + screw_holes)
+    front = difference(front, [cavity, bore] + screw_holes + bores(True))
 
     # ---- back half
     back = union([sphere] + pegs(False))
     back = back.intersection(back_keep)
     back = back.difference(cavity)
+    # Bowden wire passes from the neck socket straight into the cavity along the eye axis
+    bowden = cylinder(radius=p["bowden_r"], height=30.0, sections=32)
+    bowden.apply_translation([0, 0, -(R - wall) - 8.0])
     lip_o = cylinder(radius=R - wall - 0.3, height=p["lip_h"], sections=96)
     lip_o.apply_translation([0, 0, p["lip_h"] / 2.0])
     foot = cylinder(radius=R - 1.0, height=3.0, sections=96)      # overlaps the wall
@@ -294,14 +444,14 @@ def core_halves(p):
         ph.apply_translation([0, 0, p["lip_h"] / 2.0])
         pilots.append(ph)
     # neck mount pad: a flat boss on the back pole with a socket for the head-mount stub
-    pad = cylinder(radius=14.0, height=6.0, sections=64)        # face at z = -(R+2)
-    pad.apply_translation([0, 0, -(R + 2.0) + 3.0])
+    pad = cylinder(radius=14.0, height=8.0, sections=64)        # face at z = -(R+5)
+    pad.apply_translation([0, 0, -(R + 5.0) + 4.0])
     back = back.union(pad)
-    stub_sock = cylinder(radius=6.3, height=12.0, sections=48)  # 12 mm deep socket
-    stub_sock.apply_translation([0, 0, -(R + 2.0) + 6.0])
+    stub_sock = cylinder(radius=6.3, height=8.0, sections=48)   # 8 mm deep socket
+    stub_sock.apply_translation([0, 0, -(R + 5.0) + 4.0])
     # cable exit right next to the neck
     cable = cyl_along([0, -0.35, -1], 4.5, R - wall - 8, R + 8)
-    back = difference(back, pilots + [stub_sock, cable])
+    back = difference(back, pilots + [stub_sock, cable, bowden] + bores(False))
     # 4 mic/vent holes on top of the back half
     vents = [cyl_along([0.15 * i, 0.75, -0.6], 1.3, R - wall - 2, R + 2) for i in (-2, -1, 1, 2)]
     back = difference(back, vents)
@@ -421,14 +571,16 @@ def head_mount(p):
     beam_z = (pz - 5.5) + 21 + 4.0 + 3.5       # 4 mm in front of the servo block face
     beam = box(extents=[26, 8, 7])
     beam.apply_translation([5, y, beam_z])
-    stub_far = -(p["core_r"] + 2.0) + 12.0 - 1.0   # bottom of the socket, minus clearance
+    stub_far = -(p["core_r"] + 5.0) + 8.0 - 1.0    # bottom of the socket, minus clearance
     stub = cylinder(radius=6.0, height=stub_far - (beam_z - 3.5), sections=48)
     stub.apply_translation([0, y, (beam_z - 3.5 + stub_far) / 2.0])
     riser = box(extents=[12, 8 + abs(y), 7])   # brings the stub up to y=0 (core pole)
     riser.apply_translation([0, y / 2.0, beam_z])
     stub.apply_translation([0, -y, 0])          # stub is centred on the core pole (y=0)
     m = union([plate, beam, riser, stub])
-    m = difference(m, horn_holes)
+    sheath = cylinder(radius=p["sheath_r"], height=80.0, sections=32)   # PTFE tube runs right through
+    sheath.apply_translation([0, 0, beam_z - 20.0])
+    m = difference(m, horn_holes + [sheath])
     m_p = m.copy()
     m_p.apply_transform(rot([0, 1, 0], -90))
     m_p.apply_translation(-m_p.bounds[0])
@@ -551,10 +703,10 @@ def parts_preview(parts, path):
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-    fig = plt.figure(figsize=(16, 8), facecolor="#0b0d12")
+    fig = plt.figure(figsize=(16, 12), facecolor="#0b0d12")
     light = unit([0.3, -0.5, 0.8])
     for i, (n, m) in enumerate(parts.items()):
-        ax = fig.add_subplot(2, 4, i + 1, projection="3d", facecolor="#0b0d12")
+        ax = fig.add_subplot(3, 4, i + 1, projection="3d", facecolor="#0b0d12")
         shade = 0.35 + 0.65 * np.clip(m.face_normals @ light, 0, 1)
         cols = np.stack([shade * 0.8, shade * 0.82, shade * 0.9, np.ones_like(shade)], axis=1)
         ax.add_collection3d(Poly3DCollection(m.vertices[m.faces], facecolors=cols, edgecolors="none"))
@@ -591,6 +743,10 @@ def main():
     parts["core_front"] = check(front_p, "core_front")
     parts["core_back"] = check(back_p, "core_back")
     parts["eye_bezel"] = check(eye_bezel(p), "eye_bezel")
+    parts["slider_pin_x8"] = check(slider_pin(p), "slider_pin_x8")
+    parts["spider_ring"] = check(spider_ring(p), "spider_ring")
+    parts["spool"] = check(spool(p), "spool")
+    parts["shell_servo_mount"] = check(shell_servo_mount(p), "shell_servo_mount")
     arm_m, arm_p, y0 = arm(p)
     parts["arm"] = check(arm_p, "arm")
     hm, hm_p = head_mount(p)
@@ -600,36 +756,52 @@ def main():
     parts["base_lid"] = check(lid_m, "base_lid")
 
     # collision check between neighbouring fins and fin/core
-    fins = fins_in_place(p)
-    worst_ff = 0.0
-    for i in range(8):
-        for j in range(i + 1, 8):
-            inter = fins[i].intersection(fins[j])
-            worst_ff = max(worst_ff, 0.0 if inter.is_empty else inter.volume)
     core_plus_bezel = front.union(back)
     bez = eye_bezel(p).copy()
     bez.apply_transform(rot([1, 0, 0], 180)); bez.apply_translation([0, 0, p["core_r"] - 8.5 + 13.0])
-    worst_fc = 0.0
-    for f in fins:
-        for other in (core_plus_bezel, bez):
-            inter = f.intersection(other)
-            worst_fc = max(worst_fc, 0.0 if inter.is_empty else inter.volume)
-    print(f"  piece/piece overlap: {worst_ff:.2f} mm3 (should be 0)   piece/core+bezel overlap: {worst_fc:.2f} mm3")
+    fins_open = fins_in_place(p, 1.0)
+    fins = fins_in_place(p, 0.0)
+    for label, fs in (("closed", fins), ("open", fins_open)):
+        worst_ff = 0.0
+        for i in range(8):
+            for j in range(i + 1, 8):
+                inter = fs[i].intersection(fs[j])
+                worst_ff = max(worst_ff, 0.0 if inter.is_empty else inter.volume)
+        worst_fc = 0.0
+        for f in fs:
+            for other in (core_plus_bezel, bez):
+                inter = f.intersection(other)
+                worst_fc = max(worst_fc, 0.0 if inter.is_empty else inter.volume)
+        print(f"  shell {label:6s}: piece/piece overlap {worst_ff:.2f} mm3, piece/core+bezel overlap {worst_fc:.2f} mm3 (both should be 0)")
+    print(f"  shell travel {p['shell_travel']:.0f} mm; closed gap {p['closed_gap']:.0f} mm, open gap {p['closed_gap'] + p['shell_travel']:.0f} mm")
+    z0, z1, Lf, Lb, cap_o, cap_c = ring_travel(p)
+    print(f"  spider ring: open at z={z0:.1f}, closed at z={z1:.1f} (wire pull {z0 - z1:.1f} mm); "
+          f"tendons: front 4 = {Lf:.1f} mm, back 4 = {Lb:.1f} mm (cap centre to ring hole)")
+    # ring vs closed back caps clearance
+    ring = cylinder(radius=p["ring_r"], height=p["ring_t"], sections=48); ring.apply_translation([0, 0, z1])
+    clash = 0.0
+    for dd in peg_dirs(p):
+        cap = cylinder(radius=p["pin_cap_r"], height=p["pin_cap_t"], sections=32)
+        cap.apply_transform(align_z_to(dd)); cap.apply_translation(dd * cap_c)
+        i = cap.intersection(ring); clash = max(clash, 0.0 if i.is_empty else i.volume)
+        for other in (front, back):
+            i = cap.intersection(other); clash = max(clash, 0.0 if i.is_empty else i.volume)
+    print(f"  ring/cap/core clash at closed: {clash:.1f} mm3 (should be 0); cavity floor at z={-(p['core_r'] - p['core_wall']):.0f}")
     # tilt sweep: head + mount rotate about the tilt pivot; nothing may hit the arm
     sweep = {}
     for deg in (-20, -15, 15, 20):
         Rm = rotation_matrix(math.radians(deg), [1, 0, 0], [0, -4, p["tilt_pivot_z"]])
         worst = 0.0
-        for m in fins + [hm]:
+        for m in fins + fins_open + [hm]:
             mm = m.copy(); mm.apply_transform(Rm)
             i = mm.intersection(arm_m)
             worst = max(worst, 0.0 if i.is_empty else i.volume)
         sweep[deg] = worst
     print("  tilt sweep, overlap with the arm (mm3): " +
           "  ".join(f"{d:+d}deg={v:.1f}" for d, v in sweep.items()) + "   (software clamps to +-15)")
-    allv = np.vstack([f.vertices for f in fins])
-    span = np.ptp(allv, axis=0)
-    print(f"  assembled Ghost: {span[0]:.0f} wide x {span[1]:.0f} tall x {span[2]:.0f} deep (tip to tip)")
+    for label, fs in (("closed", fins), ("open", fins_open)):
+        span = np.ptp(np.vstack([f.vertices for f in fs]), axis=0)
+        print(f"  assembled Ghost {label}: {span[0]:.0f} wide x {span[1]:.0f} tall x {span[2]:.0f} deep")
 
     for name, m in parts.items():
         path = os.path.join(args.out, f"{name}.stl")
@@ -650,6 +822,9 @@ def main():
         scene = [(f, silver) for f in fins] + [(front, dark), (back, dark), (eye, blue),
                                                (arm_m, stand), (hm, stand), (base_w, stand), (lid_w, stand)]
         preview(scene, os.path.join(os.path.dirname(args.out), "preview.png"))
+        scene_open = [(f, silver) for f in fins_open] + [(front, dark), (back, dark), (eye, blue),
+                                                         (arm_m, stand), (hm, stand), (base_w, stand), (lid_w, stand)]
+        preview(scene_open, os.path.join(os.path.dirname(args.out), "preview_open.png"))
         parts_preview(parts, os.path.join(os.path.dirname(args.out), "parts.png"))
 
 
