@@ -1,0 +1,22 @@
+# Core
+anthropic>=0.80
+numpy>=1.26
+scipy>=1.11
+pillow>=10
+requests>=2.31
+sounddevice>=0.4.6
+
+# Wake word / STT / TTS
+openwakeword>=0.6
+onnxruntime>=1.17
+faster-whisper>=1.0
+piper-tts>=1.2
+
+# Raspberry Pi hardware (harmless to install elsewhere, they just won't find a board)
+adafruit-blinka>=8.40
+adafruit-circuitpython-rgb-display>=3.12
+adafruit-circuitpython-neopixel>=6.3
+adafruit-circuitpython-servokit>=1.3
+rpi-ws281x>=5.0 ; platform_machine in "armv7l aarch64"
+spidev>=3.6 ; platform_machine in "armv7l aarch64"
+gpiozero>=2.0 ; platform_machine in "armv7l aarch64"
