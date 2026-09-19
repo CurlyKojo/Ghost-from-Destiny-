@@ -36,7 +36,7 @@ Do this **before** joining the core halves:
 
 ## 4. Pieces
 
-1. Slide a **spring** over each pin from the outside, then test-fit a piece: the socket is 10 mm for the 9.6 mm pin, the counterbore seats the spring. Sand the pin if tight.
+1. Slide a **spring** over each pin from the outside, then test-fit a piece: the socket is 10 mm for the 9.6 mm pin, and the 6 mm deep counterbore swallows the spring when closed (only 3 mm of gap shows). Sand the pin if tight.
 2. All 8 pieces are identical. Orientation, for a front piece: the **blunt tip edge points outward**, the **ridge (crease) faces the front**, and the two **wings sit on the mid-plane** (level with the core's equator seam, one each side). The two short inner edges frame the eye. Back pieces are the same with the ridge facing backward. With the shell closed, neighbouring pieces should nearly touch along the diagonal edges from the eye ring to the wings.
 3. Sight down the assembled Ghost against `docs/reference_vs_generated.png`: from the front a clean diamond with thin X seams, from the side an X with blunt arm ends, from the top the central diamond with a notch on each side.
 4. CA glue each piece onto its pin with the shell **closed** (wire pulled) so the closed look is the tight one. Let it cure before releasing.

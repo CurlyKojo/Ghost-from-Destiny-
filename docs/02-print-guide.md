@@ -28,7 +28,7 @@ Total print time is about **32 h** on a 0.4 mm nozzle. The shell pieces are 88 �
 - **Layer height** 0.2 mm (0.16 for the fins if you want crisp tips).
 - **Walls** 3 (4 on the arm and head_mount, they carry the head).
 - **Tolerances** are built in: pegs are 10 mm Ø into 10.8 mm sockets; the bezel is 46.8 mm into a 47.2 mm bore; the core lip is 0.6 mm smaller than the front cavity. If your printer runs tight, sand the pegs; if loose, a drop of CA glue fixes everything.
-- **Shell pieces**: each is a convex solid with a 40 mm blunt tip edge, two wings and three inner corners. It rests on its largest face; two of the other faces lean past 45°, so enable supports touching the build plate only. The socket is a 10 mm hole for the slider pin (glue fit) with a 13 mm counterbore that seats the spring.
+- **Shell pieces**: each is a convex solid with a 40 mm blunt tip edge, two wings and three inner corners. It rests on its largest face; two of the other faces lean past 45°, so enable supports touching the build plate only. The socket is a 10 mm hole for the slider pin (glue fit) behind a 13 mm × 6 mm counterbore that swallows the compressed spring, so the closed shell keeps the reference's tight seams.
 - **Slider pins**: 9.6 mm pins that run in the core's 10.3 mm guide tubes. Print them slow and clean, then sand lightly with 400 grit until they slide freely with no wobble. A dab of silicone grease helps.
 - **Core halves**: the guide tubes are printed in; poke a 10 mm drill or a pin through each bore to clear any sag. The 4.4 mm hole in the neck socket is for the Bowden wire.
 - **Head mount**: printed with a 4.3 mm bore straight through for the PTFE tube. Run a 4 mm drill through it after printing.

@@ -44,7 +44,8 @@ P = dict(
     # Bowden cable (PTFE sheath + wire) runs from the ring out through the hollow neck,
     # down the arm, to a spool on a servo in the base.  Pulling the ring backward closes
     # all eight pieces at once; the generator prints the ring travel and tendon lengths.
-    closed_gap=8.0,       # piece-to-core gap along the ray when closed (spring nearly solid)
+    closed_gap=3.0,       # piece-to-core gap when closed: the reference's tight seams
+    spring_seat_depth=6.0,  # counterbore inside the piece that swallows the compressed spring
     shell_travel=12.0,    # how far each piece slides out when the shell opens
     pin_r=4.8,            # slider pin
     pin_cap_r=6.0,        # cap on the pin's inner end: stop against the guide tube + tendon anchor
@@ -237,8 +238,9 @@ def fin(p):
     r_in, r_out = socket_range(p, m)
     depth = min(p["fin_socket_depth"], (r_out - r_in) - 3.0)
     ax = piece_axis(m)
-    sock = cyl_along(ax, p["fin_socket_r"], r_in - 1.0, r_in + depth)
-    seat = cyl_along(ax, p["spring_od"] / 2.0 + 0.3, r_in - 1.0, r_in + 2.0)
+    seat_d = p["spring_seat_depth"]
+    sock = cyl_along(ax, p["fin_socket_r"], r_in - 1.0, r_in + seat_d + depth)
+    seat = cyl_along(ax, p["spring_od"] / 2.0 + 0.3, r_in - 1.0, r_in + seat_d)
     return difference(m, [sock, seat])
 
 
@@ -279,7 +281,7 @@ def slider_pin(p):
     m = piece_raw(p)
     r_in, _ = socket_range(p, m)
     cap_r0 = p["core_r"] - p["core_wall"] - p["sleeve_len"] - p["shell_travel"] - 2.0  # cap radius (closed)
-    tip_r = p["core_r"] + p["closed_gap"] + p["fin_socket_depth"] - 1.0                # socket bottom (closed)
+    tip_r = p["core_r"] + p["closed_gap"] + p["spring_seat_depth"] + p["fin_socket_depth"] - 1.0  # socket bottom (closed)
     length = tip_r - cap_r0
     pin = cylinder(radius=p["pin_r"], height=length, sections=48)
     pin.apply_translation([0, 0, length / 2.0])
