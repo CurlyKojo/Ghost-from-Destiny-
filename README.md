@@ -1,4 +1,6 @@
-# Ghost from Destiny — a 3D-printed voice companion
+ghost
+
+#Ghost from Destiny — a 3D-printed voice companion
 
 A desk-sized Ghost that listens for "Hey Ghost", talks back in character, animates its eye, glows, and looks around. Alexa-shaped idea, Ghost-shaped personality.
 
