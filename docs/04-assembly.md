@@ -20,9 +20,10 @@ Read [03-wiring](03-wiring.md) first and pre-wire the head modules with 40 cm le
 
 ## 3. Fins
 
-1. Test-fit a fin on a peg. The socket is 10.8 mm for a 10 mm peg. Sand the peg if tight.
-2. Orient each fin so its **flat front plate faces forward** (front fins) or **backward** (back fins) and the plate's right-angle corner points outward. Sight down the assembled Ghost: from the front you should see a clean diamond; from the side an X.
-3. CA glue each fin on its peg.
+1. Test-fit a piece on a peg. The socket is 10.8 mm for a 10 mm peg. Sand the peg if tight.
+2. All 8 pieces are identical. Orientation, for a front piece: the **blunt tip edge points outward**, the **ridge (crease) faces the front**, and the two **wings sit on the mid-plane** (level with the core's equator seam, one each side). The two short inner edges frame the eye. Back pieces are the same with the ridge facing backward. Neighbouring pieces should nearly touch along the diagonal edges from the eye ring to the wings.
+3. Sight down the assembled Ghost against `docs/reference_vs_generated.png`: from the front a clean diamond with thin X seams, from the side an X with blunt arm ends, from the top the central diamond with a notch on each side.
+4. CA glue each piece on its peg.
 
 ## 4. Stand
 
@@ -52,4 +53,4 @@ Read [03-wiring](03-wiring.md) first and pre-wire the head modules with 40 cm le
 
 ## Balance note
 
-The head is ~200 g and the tilt pivot sits 66 mm behind the core centre. MG90S handles it, but if tilt sags, either move to an MG996R-class servo (edit `servo_body` in the generator) or add 30–40 g of weight in the back of the core (coins, hot-glued).
+The head is ~300 g and the tilt pivot sits 70 mm behind the core centre. MG90S handles it, but if tilt sags, either move to an MG996R-class servo (edit `servo_body` in the generator) or add 30–40 g of weight in the back of the core (coins, hot-glued).

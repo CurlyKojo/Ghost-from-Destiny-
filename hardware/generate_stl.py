@@ -27,20 +27,22 @@ from trimesh.transformations import rotation_matrix, translation_matrix
 # Parameters (mm).  Tweak these, re-run, re-slice.
 # ---------------------------------------------------------------------------
 P = dict(
-    # Shell (the 8 silver fins) -------------------------------------------
-    cube_edge=110.0,      # the 8 fin tips sit on the corners of this cube
-    fin_leg=48.0,         # how far each fin's front plate runs along the cube edges
-    fin_plate_t=7.0,      # thickness of the flat front plate
-    fin_edge_bevel=2.0,   # bevel on the plate's back edges
-    fin_tail_end=43.0,    # distance from centre where the fin's inner (tail) face sits
-    fin_tail_radius=20.0, # circumradius of the tail-end triangle (controls the taper)
-    fin_socket_r=5.4,     # socket hole in the tail for the core peg
-    fin_socket_depth=8.0,
+    # Shell (the 8 silver pieces) -----------------------------------------
+    half_w=90.0,          # half of the front-view diamond width/height (tip to tip = 180)
+    half_d=75.0,          # the piece axes aim at (0, half_w, half_d): depth ~0.85 x width
+    tip_w=40.0,           # length of the blunt tip edge (the arm width in the side view)
+    wing_frac=0.5,        # wings sit this far along the diamond edge (0.5 = edge midpoint)
+    inner_diag=(25.0, 26.0),   # (d, z): inner corners at (+-d, d, z) on the diagonals, at the eye ring
+    inner_front=(26.0, 28.0),  # (y, z) of the inner-front corner on the ridge, beside the bezel
+    inner_back=44.0,      # distance of the inner-back corner (on the seam plane)
+    piece_gap=0.975,      # each piece scaled about its centroid -> ~2 mm seams
+    fin_socket_r=5.4,     # socket hole for the core peg
+    fin_socket_depth=10.0,
     # Core (black sphere) ---------------------------------------------------
-    core_r=37.0,
+    core_r=34.0,
     core_wall=3.0,
     peg_r=5.0,
-    peg_reach=6.0,        # how far the peg goes into the fin socket
+    peg_reach=8.0,        # how far the peg goes into the piece socket
     eye_bore_r=23.6,      # bore for the eye bezel tube
     lip_h=5.0,            # joining lip on the back half
     # Eye bezel -------------------------------------------------------------
@@ -51,14 +53,14 @@ P = dict(
     led_ring_r=22.5,      # 16-LED NeoPixel ring is 44.5 mm OD -> pocket radius
     led_ring_t=4.0,
     # Stand -----------------------------------------------------------------
+    base_r=90.0,
     base_h=32.0,
     base_wall=2.5,
-    base_r=80.0,
-    base_center_z=-30.0,  # base puck centre sits this far behind the core centre
-    arm_z=-92.0,          # lower arm centreline sits this far behind the core centre
+    base_center_z=-50.0,  # base puck centre sits this far behind the core centre
+    arm_z=-108.0,         # lower arm centreline: clear of the bottom-back piece's tilt sweep
     arm_w=16.0,           # arm cross-section (x)
     arm_d=24.0,           # arm cross-section (z)
-    tilt_pivot_z=-66.0,   # tilt axis (parallel to x) sits here behind the core
+    tilt_pivot_z=-70.0,   # tilt axis (parallel to x) sits here behind the core
     # Servo (MG90S / SG90 footprint) ----------------------------------------
     servo_body=(23.2, 12.6),   # slot for the body (L x W) with clearance
     servo_body_h=24.0,
@@ -129,70 +131,118 @@ def check(mesh, name):
     return mesh
 
 
-# The 8 fin axes in the world frame: tips point up/down/left/right, front & back.
-FIN_DIRS = [unit(v) for v in (
-    (0, math.sqrt(2), 1), (0, -math.sqrt(2), 1), (math.sqrt(2), 0, 1), (-math.sqrt(2), 0, 1),
-    (0, math.sqrt(2), -1), (0, -math.sqrt(2), -1), (math.sqrt(2), 0, -1), (-math.sqrt(2), 0, -1),
-)]
-# Rotation taking the cube frame (corners at +-1,+-1,+-1) to the world frame.
-CUBE_TO_WORLD = rot([0, 0, 1], 45)
+from trimesh.transformations import scale_matrix
 
 
-# ---------------------------------------------------------------------------
-# Parts
-# ---------------------------------------------------------------------------
-def fin(p):
-    """One shell fin, built on the (+,+,+) cube corner (cube frame, before the 45 deg spin).
+def piece_points(p):
+    """Corner points of the TOP-FRONT shell piece in the world frame (x right, y up, z front).
 
-    Shape: a flat right-triangle FRONT PLATE lying in the cube's front face (this is what
-    tiles the diamond you see from the front), `fin_plate_t` thick, tapering back to a small
-    triangular tail that plugs onto the core.  From the side and top the fins read as an X,
-    like the reference sheet.
+    Read straight off the reference sheet:
+      A1, A2  the blunt tip edge (a point from the front, a short flat end from the side)
+      W+, W-  the wings: on the diamond's edge midpoints, on the mid-plane z=0, where four
+              pieces meet - they give the solid diamond outline from the front and the
+              central-diamond / notch pattern from the top and side
+      D+, D-  inner corners on the diagonals at the eye ring: adjacent pieces share the
+              W-D edge, so the front shows thin diagonal seams from the eye to the edge midpoints
+      Cf      inner-front corner on the ridge, beside the eye bezel
+      Cb      inner-back corner on the seam plane
+    The ridge A1-A2-Cf is the crease you see down the middle of each piece.
     """
-    h = p["cube_edge"] / 2.0
-    d = p["fin_leg"]
-    t = p["fin_plate_t"]
-    front = np.array([[h, h, h], [h - d, h, h], [h, h - d, h]])
-    c2 = front.mean(axis=0)
-    back = np.array([c2 + (v - c2) * (1 - p["fin_edge_bevel"] / d) for v in front])
-    back[:, 2] = h - t
-    axis = unit([1, 1, 1])
-    tail_c = axis * p["fin_tail_end"]
-    # tail triangle: two vertices under the plate's outer corners (120 deg apart around
-    # the axis) and the third pointing back into the cube.  The apex itself sits ON the
-    # axis, so it cannot be used to derive a direction.
-    u1 = unit([-2, 1, 1]); u2 = unit([1, -2, 1]); u3 = unit([1, 1, -2])
-    tail = np.array([tail_c + u * p["fin_tail_radius"] for u in (u1, u2, u3)])
-    pts = np.vstack([front, back, tail])
-    m = trimesh.points.PointCloud(pts).convex_hull
+    b, c, w = p["half_w"], p["half_d"], p["tip_w"]
+    n = math.hypot(b, c)
+    axis = np.array([0.0, b / n, c / n])
+    perp = np.array([0.0, -c / n, b / n])          # down-front, perpendicular to the axis
+    L = (b * n - w * c / 2.0) / b                   # so the upper tip corner sits at y = b
+    A1 = axis * L - perp * (w / 2.0)
+    A2 = axis * L + perp * (w / 2.0)
+    f = p["wing_frac"]
+    Wp = np.array([b * f, b * (1 - f), 0.0])
+    Wm = np.array([-b * f, b * (1 - f), 0.0])
+    d, zd = p["inner_diag"]
+    Dp = np.array([d, d, zd])
+    Dm = np.array([-d, d, zd])
+    Cf = np.array([0.0, p["inner_front"][0], p["inner_front"][1]])
+    Cb = np.array([0.0, p["inner_back"], 0.0])
+    return np.array([A1, A2, Wp, Wm, Dp, Dm, Cf, Cb])
 
-    # socket for the core peg, bored in from the tail face
-    sock = cyl_along(axis, p["fin_socket_r"],
-                     p["fin_tail_end"] - 1.0,
-                     p["fin_tail_end"] + p["fin_socket_depth"])
-    return m.difference(sock)          # still sitting on the +++ cube corner
+
+def piece_transform(index):
+    """Transform taking the top-front piece to piece `index` (0..7).
+    0 top-front, 1 right-front, 2 bottom-front, 3 left-front, 4..7 the same at the back."""
+    T = rot([0, 0, 1], -90 * (index % 4))
+    if index >= 4:
+        T = np.diag([1.0, 1.0, -1.0, 1.0]) @ T
+    return T
+
+
+def piece_raw(p):
+    """Top-front piece: convex hull of the six corner points, shrunk a hair for the seams."""
+    pts = piece_points(p)
+    m = trimesh.points.PointCloud(pts).convex_hull
+    m.apply_transform(scale_matrix(p["piece_gap"], m.centroid))
+    return m
+
+
+def _inside_hull(m, pts):
+    """Point-in-convex-mesh test without extra dependencies."""
+    origins = m.triangles[:, 0, :]
+    normals = m.face_normals
+    d = (pts[:, None, :] - origins[None, :, :]) @ normals.T  # wrong shape guard below
+    d = np.einsum("pfk,fk->pf", pts[:, None, :] - origins[None, :, :], normals)
+    return np.all(d <= 1e-6, axis=1)
+
+
+def piece_axis(m):
+    return unit(m.centroid)
+
+
+def socket_range(p, m):
+    """Where along the centroid ray the peg socket can live: (entry radius, end radius)."""
+    ax = piece_axis(m)
+    rs = np.arange(20.0, 120.0, 0.25)
+    inside = _inside_hull(m, rs[:, None] * ax[None, :])
+    if not inside.any():
+        raise RuntimeError("centroid ray misses the piece")
+    r_in = float(rs[inside][0])
+    r_out = float(rs[inside][-1])
+    return r_in, r_out
+
+
+def fin(p):
+    """One shell piece (top-front orientation) with its peg socket bored along the centroid ray."""
+    m = piece_raw(p)
+    r_in, r_out = socket_range(p, m)
+    depth = min(p["fin_socket_depth"], (r_out - r_in) - 3.0)
+    sock = cyl_along(piece_axis(m), p["fin_socket_r"], r_in - 1.0, r_in + depth)
+    return m.difference(sock)
 
 
 def fin_printable(p):
-    """The fin for printing: flat front plate on the bed, tail pointing up."""
+    """The piece for printing: its largest flat face on the bed."""
     m = fin(p)
-    m.apply_transform(rot([1, 0, 0], 180))                     # front face (z=h) -> down
+    raw = piece_raw(p)
+    i = int(np.argmax(raw.area_faces))
+    nrm = raw.face_normals[i]
+    m.apply_transform(np.linalg.inv(align_z_to(-nrm)))   # face normal -> -z (face down)
     m.apply_translation(-m.bounds[0])
     return m
 
 
 def fins_in_place(p):
-    """All 8 fins exactly placed on the assembled Ghost (world frame)."""
+    """All 8 pieces exactly placed on the assembled Ghost (world frame)."""
+    base = fin(p)
     out = []
-    for sx in (1, -1):
-        for sy in (1, -1):
-            for sz in (1, -1):
-                m = fin(p)
-                # mirror the +++ fin onto the other corners; trimesh fixes the winding
-                m.apply_transform(np.diag([sx, sy, sz, 1.0]))
-                m.apply_transform(CUBE_TO_WORLD)
-                out.append(m)
+    for i in range(8):
+        m = base.copy()
+        m.apply_transform(piece_transform(i))
+        out.append(m)
     return out
+
+
+def peg_dirs(p):
+    """Centroid rays of the 8 pieces - the core pegs point along these."""
+    m = piece_raw(p)
+    return [unit(trimesh.transform_points([m.centroid], piece_transform(i))[0]) for i in range(8)]
 
 
 def core_halves(p):
@@ -200,10 +250,12 @@ def core_halves(p):
     R, wall = p["core_r"], p["core_wall"]
     sphere = icosphere(subdivisions=4, radius=R)
     cavity = icosphere(subdivisions=4, radius=R - wall)
-    peg_end = p["fin_tail_end"] + p["peg_reach"]
+    piece = piece_raw(p)
+    r_in, _ = socket_range(p, piece)
+    peg_end = r_in + p["peg_reach"]
 
     def pegs(front: bool):
-        dirs = [d for d in FIN_DIRS if (d[2] > 0) == front]
+        dirs = [d for d in peg_dirs(p) if (d[2] > 0) == front]
         return [cyl_along(d, p["peg_r"], R - wall - 1.0, peg_end) for d in dirs]
 
     big = box(extents=[4 * R, 4 * R, 2 * R])
@@ -296,7 +348,7 @@ def eye_bezel(p):
 def arm(p):
     """Curved arm: pan-horn disc at the bottom, tilt-servo pocket at the top."""
     # centreline path in the y/z plane (x = 0)
-    y0 = -(p["cube_edge"] / 2.0 * math.sqrt(3) * math.sqrt(2.0 / 3.0)) - 25.0  # under the low tips
+    y0 = -p["half_w"] - 25.0                                        # under the low tips
     top_y = 0.0
     zc = p["arm_z"]
     ztop = p["tilt_pivot_z"] - 5.5          # centre of the tilt-servo block
@@ -304,7 +356,7 @@ def arm(p):
     for y in np.linspace(y0, top_y - 4, 40):
         # vertical from the base, then an S-bend forward between y=-45 and y=-12 so the
         # lower-back fin can swing past when the head tilts nose-down
-        s = min(max((y + 45.0) / 33.0, 0.0), 1.0)
+        s = min(max((y + 52.0) / 38.0, 0.0), 1.0)
         s = s * s * (3 - 2 * s)
         pts.append([0, y, zc + (ztop - zc) * s])
     pts = np.array(pts)
@@ -527,8 +579,10 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     p = dict(P)
     if args.scale != 1.0:
-        for k in ("cube_edge", "fin_leg", "fin_tail_end", "fin_tail_radius", "core_r"):
+        for k in ("half_w", "half_d", "tip_w", "inner_back", "core_r"):
             p[k] *= args.scale
+        p["inner_front"] = tuple(v * args.scale for v in p["inner_front"])
+        p["inner_diag"] = tuple(v * args.scale for v in p["inner_diag"])
 
     print("Generating parts...")
     parts = {}
@@ -547,22 +601,34 @@ def main():
 
     # collision check between neighbouring fins and fin/core
     fins = fins_in_place(p)
-    inter = fins[0].intersection(fins[1])
-    core_sphere = icosphere(subdivisions=3, radius=p["core_r"])
-    inter2 = fins[0].intersection(core_sphere)
-    print(f"  fin/fin overlap volume: {inter.volume if not inter.is_empty else 0:.2f} mm3 "
-          f"(should be 0)   fin/core overlap: {inter2.volume if not inter2.is_empty else 0:.2f} mm3")
+    worst_ff = 0.0
+    for i in range(8):
+        for j in range(i + 1, 8):
+            inter = fins[i].intersection(fins[j])
+            worst_ff = max(worst_ff, 0.0 if inter.is_empty else inter.volume)
+    core_plus_bezel = front.union(back)
+    bez = eye_bezel(p).copy()
+    bez.apply_transform(rot([1, 0, 0], 180)); bez.apply_translation([0, 0, p["core_r"] - 8.5 + 13.0])
+    worst_fc = 0.0
+    for f in fins:
+        for other in (core_plus_bezel, bez):
+            inter = f.intersection(other)
+            worst_fc = max(worst_fc, 0.0 if inter.is_empty else inter.volume)
+    print(f"  piece/piece overlap: {worst_ff:.2f} mm3 (should be 0)   piece/core+bezel overlap: {worst_fc:.2f} mm3")
     # tilt sweep: head + mount rotate about the tilt pivot; nothing may hit the arm
-    worst = 0.0
+    sweep = {}
     for deg in (-20, -15, 15, 20):
         Rm = rotation_matrix(math.radians(deg), [1, 0, 0], [0, -4, p["tilt_pivot_z"]])
+        worst = 0.0
         for m in fins + [hm]:
             mm = m.copy(); mm.apply_transform(Rm)
             i = mm.intersection(arm_m)
             worst = max(worst, 0.0 if i.is_empty else i.volume)
-    print(f"  tilt sweep +-20 deg: worst overlap with the arm {worst:.1f} mm3 (should be 0)")
-    tips = np.array([f.vertices[np.argmax(np.linalg.norm(f.vertices, axis=1))] for f in fins])
-    span = np.ptp(tips, axis=0)
+        sweep[deg] = worst
+    print("  tilt sweep, overlap with the arm (mm3): " +
+          "  ".join(f"{d:+d}deg={v:.1f}" for d, v in sweep.items()) + "   (software clamps to +-15)")
+    allv = np.vstack([f.vertices for f in fins])
+    span = np.ptp(allv, axis=0)
     print(f"  assembled Ghost: {span[0]:.0f} wide x {span[1]:.0f} tall x {span[2]:.0f} deep (tip to tip)")
 
     for name, m in parts.items():
@@ -573,7 +639,7 @@ def main():
     if not args.no_preview:
         silver, dark, blue, stand = "#c9ced6", "#22252b", "#4fc3ff", "#3a3f48"
         eye = cylinder(radius=p["bezel_window_r"], height=4, sections=64)
-        eye.apply_translation([0, 0, p["core_r"] - 6])
+        eye.apply_translation([0, 0, p["core_r"] - 4])
         # stand in world coords: base puck lies in the x/z plane under the ghost
         base_w = base_m.copy()
         base_w.apply_transform(rot([1, 0, 0], -90))

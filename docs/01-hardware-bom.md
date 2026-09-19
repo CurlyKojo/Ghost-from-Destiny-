@@ -39,18 +39,18 @@ Prices are typical 2026 US street prices. Total is roughly **$140–170** plus f
 | M2.5 × 6 mm screws | 4 | Pi to the standoffs in the base |
 | M3 × 10 mm screws | 4 | Base lid |
 | Servo horn screws (come with the servos) | — | |
-| CA glue (super glue) + hot glue | — | Fins to pegs, bezel, LED ring |
+| CA glue (super glue) + hot glue | — | Shell pieces to pegs, bezel, LED ring |
 | Double-sided foam tape | — | Display, mic, amp |
 | Sandpaper 220/400, filler primer, paint (see print guide) | — | Optional finish |
 
 ## Filament
 
-About **320 g** total.
+About **460 g** total.
 
 | Colour | Parts | ~Grams |
 |--------|-------|--------|
-| Silver / light grey PLA or PETG | 8 × fin | 100 |
-| Black or dark grey | core_front, core_back, arm, head_mount, base, base_lid | 210 |
+| Silver / light grey PLA or PETG | 8 × shell piece | 240 |
+| Black or dark grey | core_front, core_back, arm, head_mount, base, base_lid | 215 |
 | White or natural/translucent | eye_bezel | 8 |
 
 ## Optional upgrades

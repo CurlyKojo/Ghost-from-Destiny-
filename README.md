@@ -4,7 +4,11 @@ A desk-sized Ghost that listens for "Hey Ghost", talks back in character, animat
 
 ![preview](hardware/preview.png)
 
-- **Print it** — 8 STL files, ~320 g of filament, ~22 h of printing. Parametric generator included.
+The shell is built straight from the Bungie reference sheet: the same 8 pieces, the diamond with its X seams from the front, the X with blunt arm ends from the side, the central diamond and notches from the top.
+
+![reference vs generated](docs/reference_vs_generated.png)
+
+- **Print it** — 8 STL files, ~460 g of filament, ~28 h of printing. 180 mm tip to tip. Parametric generator included.
 - **Build it** — Raspberry Pi 4, a round 1.28" LCD for the eye, I2S mic + amp, a 16-LED ring, two servos for pan/tilt. About $150.
 - **Run it** — wake word + speech-to-text run offline on the Pi; the personality is Claude with emotion tags that drive the eye, the lights and the body; the voice is Piper with a "Ghost" filter chain.
 
@@ -66,7 +70,7 @@ python3 hardware/generate_stl.py            # writes hardware/stl + previews, ch
 python3 hardware/generate_stl.py --scale 0.95   # a slightly smaller Ghost
 ```
 
-The generator also verifies that fins don't intersect each other or the core, and that the head clears the arm through ±20° of tilt.
+The generator also verifies that the shell pieces don't intersect each other, the core or the eye bezel, and that the head clears the arm through ±15° of tilt (the software's limit).
 
 ## Notes
 
