@@ -90,6 +90,7 @@ function brushedUV(geometry) {
 }
 
 const SPRING_L = 15;
+const TIP_LEN = 8;      // mm of orange at the end of each shell piece
 function springGeometry(coils = 6.5, radius = 5.7, wire = 0.55) {
   // helix along +z at a nominal 15 mm, scaled in z to the live spring length (9 mm shut, 21 mm open)
   class Helix extends THREE.Curve {
@@ -111,6 +112,17 @@ export function buildGhost({ meta, geo }) {
     color: 0xe4e6ea, metalness: 1.0, roughness: 0.66, roughnessMap: brushed,
     anisotropy: 0.5, envMapIntensity: 1.0,
   });
+  // painted tips: the last TIP_LEN mm of each piece, measured along the piece's own axis
+  const tipU = { uTipStart: { value: 1e9 }, uTipColor: { value: new THREE.Color(0xd08a2e) }, uTipAmount: { value: 1 } };
+  silver.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, tipU);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float axial;\nvarying float vAxial;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAxial = axial;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAxial;\nuniform float uTipStart, uTipAmount;\nuniform vec3 uTipColor;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\nfloat tipK = smoothstep(-fwidth(vAxial), fwidth(vAxial), vAxial - uTipStart) * uTipAmount;\ndiffuseColor.rgb = mix(diffuseColor.rgb, uTipColor, tipK);')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.42, tipK);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.0, tipK);');
+  };
   const black = new THREE.MeshPhysicalMaterial({ color: 0x111113, metalness: 0.0, roughness: 0.62, envMapIntensity: 0.9 });
   const blackSatin = new THREE.MeshPhysicalMaterial({ color: 0x0a0a0c, metalness: 0.0, roughness: 0.48, envMapIntensity: 1.0 });
   const hidden = new THREE.MeshPhysicalMaterial({ color: 0x101012, metalness: 0.0, roughness: 0.5 });   // pins, ring, spool: "any" filament
@@ -203,6 +215,13 @@ export function buildGhost({ meta, geo }) {
 
   // ---- shell: 8 pieces on 8 slider pins with 8 springs -------------------------------------
   brushedUV(geo.fin);
+  {
+    const p = geo.fin.attributes.position, ax = V3(meta.fin_axis0), a = new Float32Array(p.count), v = new THREE.Vector3();
+    let mx = -1e9;
+    for (let i = 0; i < p.count; i++) { a[i] = v.fromBufferAttribute(p, i).dot(ax); mx = Math.max(mx, a[i]); }
+    geo.fin.setAttribute('axial', new THREE.BufferAttribute(a, 1));
+    tipU.uTipStart.value = mx - TIP_LEN;
+  }
   const fins = [], pins = [], springs = [];
   const springGeo = springGeometry();
   const zAxis = new THREE.Vector3(0, 0, 1);
@@ -276,7 +295,7 @@ export function buildGhost({ meta, geo }) {
   return {
     root, pan, tilt, head, meta, st, eyeU,
     parts: { base, lid, arm, headMount, coreFront, coreBack, bezel, screen, ledGroup, fins, pins, springs, ring, tiltServo },
-    materials: { silver, black, blackSatin, bezelMat, screenMat, hidden, steel },
+    materials: { silver, black, blackSatin, bezelMat, screenMat, hidden, steel }, tipU,
     setOpen, setMood, setGlow, update,
   };
 }
