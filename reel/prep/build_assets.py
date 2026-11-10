@@ -252,6 +252,7 @@ def main():
     servo_y = -(p["arm_z"] - p["base_center_z"])
     manifest.update(
         fin_matrices=fin_mats, fin_dirs=dirs, fin_axis0=axis0.tolist(),
+        fin_bed_matrix=(fin_print @ T(-axis0 * closed_ofs)).tolist(),   # closed world pose -> print bed (z up)
         shell_travel=p["shell_travel"], closed_gap=p["closed_gap"],
         spring_seat_depth=p["spring_seat_depth"], spring_od=12.0,
         core_r=R, core_wall=p["core_wall"],

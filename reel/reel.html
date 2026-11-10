@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ghost reel</title>
+<style>
+@font-face{font-family:'Inter Tight';font-weight:700;src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter Tight';font-weight:800;src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-800-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter Tight';font-weight:900;src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-900-normal.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-weight:500;src:url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-weight:700;src:url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2) format('woff2')}
+html,body{margin:0;background:#000;overflow:hidden}
+canvas{display:block;position:absolute;left:0;top:0}
+#help{position:fixed;left:12px;bottom:10px;font:12px system-ui;color:#9aa;z-index:5}
+</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<script type="module">
+// Capture:  reel.html?capture=1[&scale=0.5]   then call window.renderFrame(i)
+// Preview:  reel.html                          space = pause, B = beat markers, T = text, arrows = step a beat
+import * as THREE from 'three';
+import { loadAssets, buildGhost } from './src/ghost.js';
+import { buildStudio, buildPost } from './src/studio.js';
+import { buildProps } from './src/props.js';
+import { createTimeline, FPS, FRAMES, DURATION, BEAT } from './src/timeline.js';
+import { createOverlay } from './src/overlay.js';
+
+const q = new URLSearchParams(location.search);
+const capture = q.has('capture');
+const scale = +(q.get('scale') || (capture ? 1 : Math.min(1, (innerHeight - 4) / 1920)));
+const W = Math.round(1080 * scale), H = Math.round(1920 * scale);
+
+if (q.has('beatsonly')) {
+  // just the beat-marker strip on a transparent page (composited over the clean render afterwards)
+  document.documentElement.style.background = 'transparent'; document.body.style.background = 'transparent';
+  const overlay = createOverlay(scale); overlay.setBeats(true); overlay.setUI(false);
+  await document.fonts.ready;
+  await Promise.all(['700 40px "JetBrains Mono"', '500 40px "JetBrains Mono"'].map((f) => document.fonts.load(f)));
+  const empty = { hook: 0, label: null, bubbles: [], end: 0, heyGhost: 0, scrimTop: 0, scrimBottom: 0 };
+  window.renderFrame = (i) => { overlay.draw({ t: i / FPS, beat: i / FPS / BEAT, ov: empty }); return 'beats'; };
+  window.reel = { FPS, FRAMES, DURATION, BEAT };
+  window.renderFrame(0); window.__ready = true;
+  await new Promise(() => {});
+}
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.setClearColor(0x000000, 0);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.VSMShadowMap;
+renderer.toneMapping = THREE.NoToneMapping; renderer.localClippingEnabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(24, W / H, 50, 14000);
+camera.layers.enable(1);
+const assets = await loadAssets();
+const voice = await fetch('assets/voice.json').then((r) => r.json());
+const ghost = buildGhost(assets);
+scene.add(ghost.root);
+const props = buildProps(ghost, assets.geo);
+scene.add(props.printer);
+const studio = buildStudio(renderer, scene, { floorY: assets.meta.base_bottom_y, width: W, height: H });
+const post = buildPost(renderer, scene, camera, W, H);
+const timeline = createTimeline({ scene, camera, ghost, props, studio, post, voice });
+const overlay = createOverlay(scale);
+overlay.setBeats(q.has('beats'));
+await document.fonts.ready;
+await Promise.all(['900 100px "Inter Tight"', '800 50px "Inter Tight"', '700 40px "JetBrains Mono"', '500 40px "JetBrains Mono"'].map((f) => document.fonts.load(f)));
+
+function frame(t) {
+  const st = timeline.apply(t);
+  ghost.update(renderer, t);
+  post.render(t);
+  overlay.draw(st);
+  return st;
+}
+window.reel = { FPS, FRAMES, DURATION, BEAT, overlay, frame };
+window.renderFrame = (i) => { const st = frame(i / FPS); renderer.getContext().finish(); return st.shot; };
+window.renderTime = (t) => { const st = frame(t); renderer.getContext().finish(); return st.shot; };
+frame(0);
+window.__ready = true;
+
+if (!capture) {
+  const help = document.createElement('div'); help.id = 'help'; help.textContent = 'space: play/pause   B: beat markers   T: text   ← →: step one beat'; document.body.appendChild(help);
+  const audio = new Audio('assets/voice.wav');
+  let playing = false, t = 0, last = performance.now();
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { playing = !playing; last = performance.now(); if (playing) { audio.currentTime = t; audio.play(); } else audio.pause(); }
+    if (e.key === 'b' || e.key === 'B') overlay.setBeats(!overlay.beats);
+    if (e.key === 'ArrowRight') t = Math.min(DURATION - 0.01, (Math.floor(t / BEAT + 1e-6) + 1) * BEAT);
+    if (e.key === 'ArrowLeft') t = Math.max(0, (Math.ceil(t / BEAT - 1e-6) - 1) * BEAT);
+    if (!playing) frame(t);
+  });
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (!playing) return;
+    const now = performance.now(); t += (now - last) / 1000; last = now;
+    if (t >= DURATION) { t = 0; audio.currentTime = 0; }
+    frame(t);
+  })();
+}
+</script>
+</body>
+</html>

@@ -71,14 +71,14 @@ const FLOOR_SHADER = {
     uTexel: { value: new THREE.Vector2(1 / 512, 1 / 512) }, uBlur: { value: 2.2 }, uReflect: { value: 0.7 },
     uPool: { value: new THREE.Color(0.040, 0.050, 0.068) }, uPoolR: { value: 460 }, uCenter: { value: new THREE.Vector2(0, -58) },
     uFloorY: { value: 0 }, uFade: { value: 1400 }, uFog: { value: new THREE.Color() }, uFogD: { value: 0.00042 },
-    uHorizon: { value: new THREE.Color() }, uTop: { value: new THREE.Color(0.0012, 0.0016, 0.0024) },
+    uHorizon: { value: new THREE.Color() }, uTop: { value: new THREE.Color(0.0012, 0.0016, 0.0024) }, uSkyGain: { value: 1 },
   },
   vertexShader: /* glsl */`
     uniform mat4 textureMatrix; varying vec4 vUv; varying vec3 vWorld;
     void main() { vUv = textureMatrix * vec4(position, 1.0); vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
   fragmentShader: /* glsl */`
     uniform vec3 color; uniform sampler2D tDiffuse; varying vec4 vUv; varying vec3 vWorld;
-    uniform vec2 uTexel; uniform float uBlur, uReflect, uPoolR, uFade, uFogD; uniform vec3 uPool, uFog, uHorizon, uTop; uniform vec2 uCenter;
+    uniform vec2 uTexel; uniform float uBlur, uReflect, uPoolR, uFade, uFogD; uniform vec3 uPool, uFog, uHorizon, uTop; uniform vec2 uCenter; uniform float uSkyGain;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     void main() {
       vec2 uv = vUv.xy / vUv.w;
@@ -96,7 +96,7 @@ const FLOOR_SHADER = {
       }
       vec3 V = normalize(cameraPosition - vWorld);
       float e = abs(V.y);
-      vec3 sky = mix(uHorizon, uTop, smoothstep(0.0, 0.5, e)) + uHorizon * 0.9 * exp(-e * 14.0);
+      vec3 sky = (mix(uHorizon, uTop, smoothstep(0.0, 0.5, e)) + uHorizon * 0.9 * exp(-e * 14.0)) * uSkyGain;
       vec4 r4 = acc / ws;
       vec3 refl = r4.rgb + sky * (1.0 - clamp(r4.a, 0.0, 1.0));
       float F = 0.05 + 0.95 * pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0);
@@ -104,7 +104,7 @@ const FLOOR_SHADER = {
       float fade = exp(-d / uFade);
       vec3 c = color + uPool * pool + refl * uReflect * mix(0.45, 1.0, F) * mix(1.0, fade, clamp(r4.a, 0.0, 1.0));
       float fd = length(cameraPosition - vWorld) * uFogD;
-      c = mix(uFog, c, exp(-fd * fd));
+      c = mix(uFog * uSkyGain, c, exp(-fd * fd));
       gl_FragColor = vec4(c, 1.0);
     }`,
 };
@@ -120,7 +120,7 @@ export function buildStudio(renderer, scene, { floorY, width, height }) {
   // ---- direct lights --------------------------------------------------------------------
   const rim = new THREE.DirectionalLight(0xdcecff, 3.0);
   rim.position.set(-420, 330, -520); rim.target.position.set(0, -20, -30);
-  rim.castShadow = true; rim.shadow.mapSize.set(2048, 2048); rim.shadow.radius = 9; rim.shadow.blurSamples = 16;
+  rim.castShadow = true; rim.shadow.mapSize.set(1024, 1024); rim.shadow.radius = 5; rim.shadow.blurSamples = 10;
   Object.assign(rim.shadow.camera, { left: -260, right: 260, top: 260, bottom: -260, near: 100, far: 1600 });
   rim.shadow.bias = -0.0006; rim.shadow.normalBias = 0.6;
   const kicker = new THREE.DirectionalLight(0xbfd8ff, 0.9);
@@ -153,7 +153,18 @@ export function buildStudio(renderer, scene, { floorY, width, height }) {
   const h3 = hazeSprite(0x9fb8dc, 900, 0.05); h3.position.set(-330, 330, -560);
   haze.add(h1, h2, h3); haze.children.forEach((h) => h.layers.set(1)); scene.add(haze);
 
-  return { rim, kicker, fill, top, floor, floorU: floor.material.uniforms, shadowCatcher, haze, dome };
+  // one dial for the whole studio: 1 = the approved look, 0 = lights off (only the Ghost's own glow)
+  const base = { rim: rim.intensity, kicker: kicker.intensity, fill: fill.intensity, top: top.intensity,
+    pool: floor.material.uniforms.uPool.value.clone(), haze: haze.children.map((h) => h.material.opacity) };
+  function setLevel(k, { rimK = k, hazeK = k, envK = k } = {}) {
+    rim.intensity = base.rim * rimK; kicker.intensity = base.kicker * rimK; fill.intensity = base.fill * k; top.intensity = base.top * k;
+    scene.environmentIntensity = envK;
+    floor.material.uniforms.uPool.value.copy(base.pool).multiplyScalar(k);
+    dome.material.uniforms.uGain.value = hazeK;
+    floor.material.uniforms.uSkyGain.value = hazeK;
+    haze.children.forEach((h, i) => (h.material.opacity = base.haze[i] * hazeK));
+  }
+  return { rim, kicker, fill, top, floor, floorU: floor.material.uniforms, haze, dome, setLevel };
 }
 
 // ---------------------------------------------------------------------------------------
@@ -176,10 +187,9 @@ const DOF_SHADER = {
       float z0 = viewZ(vUv), c0 = coc(z0);
       vec3 acc = texture2D(tDiffuse, vUv).rgb; float ws = 1.0;
       if (uAperture > 0.0) {
-        float rot = hash(gl_FragCoord.xy) * 6.2831;
-        for (int i = 0; i < 40; i++) {
+        for (int i = 0; i < 36; i++) {
           float fi = float(i) + 0.5;
-          float r = sqrt(fi / 40.0), a = fi * 2.39996 + rot;
+          float r = sqrt(fi / 36.0), a = fi * 2.39996;
           vec2 o = vec2(cos(a), sin(a)) * r;
           // gather: a sample contributes if its own blur reaches this pixel (keeps sharp edges sharp)
           vec2 uv = vUv + o * uMaxBlur * uTexel;
@@ -200,11 +210,11 @@ const GRADE_SHADER = {
   uniforms: {
     tDiffuse: { value: null }, uExposure: { value: 1.0 }, uVignette: { value: 0.78 }, uGrain: { value: 0.03 },
     uTime: { value: 0 }, uSat: { value: 1.0 }, uLift: { value: new THREE.Vector3(0.004, 0.007, 0.013) }, uCA: { value: 0.0012 },
-    uFade: { value: 1.0 }, uContrast: { value: 0.18 },
+    uFade: { value: 1.0 }, uContrast: { value: 0.18 }, uFlash: { value: 0.0 },
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uExposure, uVignette, uGrain, uTime, uSat, uCA, uFade, uContrast; uniform vec3 uLift; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uExposure, uVignette, uGrain, uTime, uSat, uCA, uFade, uContrast, uFlash; uniform vec3 uLift; varying vec2 vUv;
     vec3 RRTAndODTFit(vec3 v) { vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
     vec3 aces(vec3 color) {
       const mat3 I = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
@@ -218,6 +228,7 @@ const GRADE_SHADER = {
       c.r = texture2D(tDiffuse, vUv + d * uCA).r; c.g = texture2D(tDiffuse, vUv).g; c.b = texture2D(tDiffuse, vUv - d * uCA).b;
       float v = 1.0 - uVignette * smoothstep(0.25, 0.95, length(d * vec2(1.0, 0.78)) * 1.35);
       c *= v;
+      c += uFlash * vec3(0.55, 0.8, 1.0);
       c = aces(c);
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(l), c, uSat);
@@ -241,12 +252,20 @@ export function buildPost(renderer, scene, camera, width, height, { samples = 4 
 
   const depthRT = new THREE.WebGLRenderTarget(width, height, { depthTexture, depthBuffer: true });
   const depthMat = new THREE.MeshBasicMaterial({ colorWrite: false });
+  const depthClipped = new Map();          // one depth material per set of clipping planes
   function renderDepth() {
-    const hidden = [];
-    scene.traverse((o) => { if (o.visible && (o.isSprite || o.userData.noDepth || (o.material && o.material.transparent))) { hidden.push(o); o.visible = false; } });
-    const bg = scene.background; scene.background = null; scene.overrideMaterial = depthMat;
-    renderer.setRenderTarget(depthRT); renderer.clear(); renderer.render(scene, camera);
-    scene.overrideMaterial = null; scene.background = bg; renderer.setRenderTarget(null);
+    const hidden = [], swapped = [];
+    scene.traverse((o) => {
+      if (!o.visible) return;
+      if (o.isSprite || o.userData.noDepth || (o.material && o.material.transparent)) { hidden.push(o); o.visible = false; return; }
+      if (o.isMesh && o.material && !Array.isArray(o.material)) {
+        let m = depthMat; const cp = o.material.clippingPlanes;
+        if (cp && cp.length) { m = depthClipped.get(cp); if (!m) { m = new THREE.MeshBasicMaterial({ colorWrite: false, clippingPlanes: cp, side: THREE.DoubleSide }); depthClipped.set(cp, m); } }
+        swapped.push([o, o.material]); o.material = m;
+      }
+    });
+    renderer.setRenderTarget(depthRT); renderer.clear(); renderer.render(scene, camera); renderer.setRenderTarget(null);
+    for (const [o, m] of swapped) o.material = m;
     hidden.forEach((o) => (o.visible = true));
   }
 

@@ -41,7 +41,7 @@ const LOOKS = {
 const L = { ...LOOKS[state] };
 for (const k of ['pan', 'tilt', 'bloom', 'glow', 'eyePower', 'ledLevel']) if (q.has(k)) L[k] = +q.get(k);
 if (q.has('mood')) L.mood = q.get('mood');
-ghost.setOpen(L.open); ghost.setMood(L.mood, 1); ghost.setGlow(L);
+ghost.setOpen(L.open); Object.assign(ghost.look, { moodA: L.mood, moodB: L.mood, mix: 0, eyePower: L.eyePower, ledLevel: L.ledLevel, glow: L.glow });
 ghost.pan.rotation.y = THREE.MathUtils.degToRad(L.pan); ghost.tilt.rotation.x = THREE.MathUtils.degToRad(-L.tilt);
 post.bloom.strength = L.bloom; post.grade.uniforms.uExposure.value = L.exposure;
 

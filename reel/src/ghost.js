@@ -102,6 +102,31 @@ function springGeometry(coils = 6.5, radius = 5.7, wire = 0.55) {
   return new THREE.TubeGeometry(new Helix(), 260, wire, 8, false);
 }
 
+// Shader patch shared by the shell material and the "still printing" material:
+//  * painted tips (last TIP_LEN mm along the piece axis)
+//  * 0.2 mm layer lines as a bump, only where uLayer > 0 (the print shots)
+export function silverPatch(sh, uni) {
+  Object.assign(sh.uniforms, uni);
+  sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float axial;\nattribute float printH;\nvarying float vAxial;\nvarying float vPrintH;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAxial = axial; vPrintH = printH;');
+  sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAxial;\nvarying float vPrintH;\nuniform float uTipStart, uTipAmount, uLayer;\nuniform vec3 uTipColor;')
+    .replace('#include <color_fragment>', '#include <color_fragment>\nfloat tipK = smoothstep(-fwidth(vAxial), fwidth(vAxial), vAxial - uTipStart) * uTipAmount;\ndiffuseColor.rgb = mix(diffuseColor.rgb, uTipColor, tipK);')
+    .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.42, tipK);')
+    .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.0, tipK);')
+    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      if (uLayer > 0.0) {
+        float ph = vPrintH * 6.2831853 / 0.24;
+        float fw = fwidth(ph);
+        float amp = uLayer * 0.04 * smoothstep(1.5, 0.45, fw);            // fade out before it aliases
+        float hgt = amp * sin(ph);
+        vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
+        vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
+        float det = dot(sx, r1);
+        vec3 grad = sign(det) * (dFdx(hgt) * r1 + dFdy(hgt) * r2);
+        normal = normalize(abs(det) * normal - grad);
+      }`);
+}
+
 // ---------------------------------------------------------------------------------------
 export function buildGhost({ meta, geo }) {
   const root = new THREE.Group(); root.name = 'ghost';
@@ -113,16 +138,9 @@ export function buildGhost({ meta, geo }) {
     anisotropy: 0.5, envMapIntensity: 1.0,
   });
   // painted tips: the last TIP_LEN mm of each piece, measured along the piece's own axis
-  const tipU = { uTipStart: { value: 1e9 }, uTipColor: { value: new THREE.Color(0xd08a2e) }, uTipAmount: { value: 1 } };
-  silver.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, tipU);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float axial;\nvarying float vAxial;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAxial = axial;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vAxial;\nuniform float uTipStart, uTipAmount;\nuniform vec3 uTipColor;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\nfloat tipK = smoothstep(-fwidth(vAxial), fwidth(vAxial), vAxial - uTipStart) * uTipAmount;\ndiffuseColor.rgb = mix(diffuseColor.rgb, uTipColor, tipK);')
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.42, tipK);')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.0, tipK);');
-  };
+  const tipU = { uTipStart: { value: 1e9 }, uTipColor: { value: new THREE.Color(0xd08a2e) }, uTipAmount: { value: 1 }, uLayer: { value: 0 } };
+  const patchSilver = (mat, uni) => { mat.onBeforeCompile = (sh) => silverPatch(sh, uni); };
+  patchSilver(silver, tipU);
   const black = new THREE.MeshPhysicalMaterial({ color: 0x111113, metalness: 0.0, roughness: 0.62, envMapIntensity: 0.9 });
   const blackSatin = new THREE.MeshPhysicalMaterial({ color: 0x0a0a0c, metalness: 0.0, roughness: 0.48, envMapIntensity: 1.0 });
   const hidden = new THREE.MeshPhysicalMaterial({ color: 0x101012, metalness: 0.0, roughness: 0.5 });   // pins, ring, spool: "any" filament
@@ -220,6 +238,9 @@ export function buildGhost({ meta, geo }) {
     let mx = -1e9;
     for (let i = 0; i < p.count; i++) { a[i] = v.fromBufferAttribute(p, i).dot(ax); mx = Math.max(mx, a[i]); }
     geo.fin.setAttribute('axial', new THREE.BufferAttribute(a, 1));
+    const B = new THREE.Matrix4().fromArray(meta.fin_bed_matrix.flat()).transpose(), h = new Float32Array(p.count);
+    for (let i = 0; i < p.count; i++) h[i] = v.fromBufferAttribute(p, i).applyMatrix4(B).z;
+    geo.fin.setAttribute('printH', new THREE.BufferAttribute(h, 1));
     tipU.uTipStart.value = mx - TIP_LEN;
   }
   const fins = [], pins = [], springs = [];
@@ -238,12 +259,27 @@ export function buildGhost({ meta, geo }) {
   const ring = mesh(geo.spider_ring, hidden, 'spider_ring'); head.add(ring);
 
   // ---- state --------------------------------------------------------------------------
-  const st = { open: 0, mood: 'neutral', eyePower: 1, ledLevel: 1, glow: 1 };
-  const cur = { col: new THREE.Color(), led: new THREE.Color() };
-  const tmp = new THREE.Color();
+  // look: everything the timeline can drive on the head, as plain numbers (no easing state,
+  // so any frame can be rendered on its own)
+  const look = {
+    moodA: 'neutral', moodB: 'neutral', mix: 0,     // blend between two moods from eye.py
+    eyePower: 1,        // screen backlight 0..1
+    ledLevel: 1,        // ring brightness 0..1
+    glow: 1,            // how hard eye + ring hit the scene
+    speak: 0,           // speech loudness 0..1 (eye.py: radius *= 1 + 0.55*level; lights.py: k = 0.35 + 0.65*level)
+    speaking: 0,        // 0..1 blend into the speaking behaviour
+    timer: -1,          // >= 0: lens ring becomes a countdown arc holding this fraction
+    blink: 1,
+    ledChase: 0,        // 0..1 blend to a single lit LED running round the ring (boot)
+    ledChasePos: 0,
+  };
+  const colA = new THREE.Color(), colB = new THREE.Color(), eyeCol = new THREE.Color(), ledCol = new THREE.Color();
+  const KEYS = [['radius', 'uRadius'], ['sx', 'uSx'], ['sy', 'uSy'], ['dy', 'uDy'], ['glow', 'uGlow'], ['spin', 'uSpin'], ['ring', 'uRing']];
+  const srgb = (c, out) => out.setRGB(c[0] / 255, c[1] / 255, c[2] / 255, THREE.SRGBColorSpace);
 
+  let shellOpen = 0;
   function setOpen(f, perPiece) {
-    st.open = f;
+    shellOpen = f;
     for (let i = 0; i < 8; i++) {
       const fi = perPiece ? perPiece[i] : f;
       const d = fins[i].userData.dir, travel = meta.shell_travel * fi;
@@ -252,50 +288,49 @@ export function buildGhost({ meta, geo }) {
       const r0 = meta.core_r - 0.3, r1 = meta.core_r + meta.closed_gap + meta.spring_seat_depth + travel;
       springs[i].position.copy(d).multiplyScalar(r0); springs[i].scale.set(1, 1, (r1 - r0) / SPRING_L);
     }
+    // the spider ring rides the Bowden wire: 10.4 mm back pulls all eight pieces in 12 mm
     ring.position.set(0, 0, THREE.MathUtils.lerp(meta.ring_z_closed, meta.ring_z_open, f) - meta.ring_t / 2);
   }
 
-  // mood: name from software/ghost/eye.py MOODS; eye colour and LED colour come from there
-  function setMood(name, k = 1) {
-    st.mood = name;
-    const m = MOODS[name] || MOODS.neutral, l = LED_COLORS[name] || LED_COLORS.neutral;
-    tmp.setRGB(m.col[0] / 255, m.col[1] / 255, m.col[2] / 255, THREE.SRGBColorSpace);
-    const u = eyeU;
-    if (k >= 1) cur.col.copy(tmp); else cur.col.lerp(tmp, k);
-    for (const [key, un] of [['radius', 'uRadius'], ['sx', 'uSx'], ['sy', 'uSy'], ['dy', 'uDy'], ['glow', 'uGlow'], ['spin', 'uSpin'], ['ring', 'uRing']])
-      u[un].value += (m[key] - u[un].value) * Math.min(k, 1);
-    u.uIsListening.value = name === 'listening' ? 1 : 0;
-    tmp.setRGB(l[0] / 255, l[1] / 255, l[2] / 255, THREE.SRGBColorSpace);
-    if (k >= 1) cur.led.copy(tmp); else cur.led.lerp(tmp, k);
-  }
-
-  // eyePower 0..1 (screen backlight), ledLevel 0..1 (ring brightness), glow = how hard both hit the scene
-  function setGlow({ eyePower = st.eyePower, ledLevel = st.ledLevel, glow = st.glow } = {}) {
-    st.eyePower = eyePower; st.ledLevel = ledLevel; st.glow = glow;
-  }
-
   function update(renderer, t) {
-    const u = eyeU;
-    u.uTime.value = t; u.uCol.value.copy(cur.col); u.uPower.value = st.eyePower;
+    const u = eyeU, A = MOODS[look.moodA] || MOODS.neutral, B = MOODS[look.moodB] || MOODS.neutral, w = look.mix;
+    srgb(A.col, colA); srgb(B.col, colB); eyeCol.copy(colA).lerp(colB, w);
+    for (const [k, un] of KEYS) u[un].value = A[k] + (B[k] - A[k]) * w;
+    u.uRadius.value *= 1 + 0.55 * look.speak * look.speaking;
+    u.uIsListening.value = 0; u.uListen.value = 0;
+    u.uTime.value = t; u.uCol.value.copy(eyeCol); u.uPower.value = look.eyePower; u.uTimer.value = look.timer; u.uBlink.value = look.blink;
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(eyeRT); renderer.render(eyeScene, eyeCam); renderer.setRenderTarget(prev);
-    screenMat.emissiveIntensity = 0.62 * st.glow;
-    // lights.py: k = 0.6 + 0.15*sin(t*1.6 + phase) for the resting moods
+    screenMat.emissiveIntensity = 0.62 * look.glow;
+
+    srgb(LED_COLORS[look.moodA] || LED_COLORS.neutral, colA); srgb(LED_COLORS[look.moodB] || LED_COLORS.neutral, colB);
+    ledCol.copy(colA).lerp(colB, w);
+    let mean = 0;
     for (let i = 0; i < 16; i++) {
-      const k = (0.6 + 0.15 * Math.sin(t * 1.6 + (i / 16) * Math.PI * 2)) * st.ledLevel;
-      leds[i].material.color.copy(cur.led).multiplyScalar(k * 7.0 * st.glow);
+      const rest = 0.6 + 0.15 * Math.sin(t * 1.6 + (i / 16) * Math.PI * 2);        // lights.py, resting moods
+      const talk = 0.35 + 0.65 * look.speak;                                        // lights.py, speaking
+      let k = rest + (talk - rest) * look.speaking;
+      if (look.ledChase > 0) {
+        const dph = ((i / 16 - look.ledChasePos) % 1 + 1) % 1;
+        const chase = Math.pow(Math.max(0, Math.cos(dph * Math.PI * 2)), 6);
+        k = k + (chase - k) * look.ledChase;
+      }
+      k *= look.ledLevel; mean += k / 16;
+      leds[i].material.color.copy(ledCol).multiplyScalar(k * 7.0 * look.glow);
     }
-    bezelMat.emissive.copy(cur.led); bezelMat.emissiveIntensity = 0.8 * st.ledLevel * st.glow;
-    eyeLight.color.copy(cur.led).lerp(cur.col, 0.5);
-    eyeLight.intensity = 1.0e4 * st.glow * (0.55 * st.ledLevel + 0.45 * st.eyePower);
-    wellLight.color.copy(cur.col); wellLight.intensity = 150 * st.glow * st.eyePower;
+    bezelMat.emissive.copy(ledCol); bezelMat.emissiveIntensity = 1.33 * mean * look.glow;
+    eyeLight.color.copy(ledCol).lerp(eyeCol, 0.5);
+    eyeLight.intensity = 1.0e4 * look.glow * (0.9 * mean + 0.45 * look.eyePower);
+    wellLight.color.copy(eyeCol); wellLight.intensity = 150 * look.glow * look.eyePower;
   }
 
-  setOpen(0); setMood('neutral', 1);
+  setOpen(0);
+  const frontSet = [coreFront, bezel, screen, screenSurround, ledGroup, eyeLight, wellLight, ...fins.slice(0, 4), ...pins.slice(0, 4), ...springs.slice(0, 4)];
+  const backSet = [coreBack, headMount, ...fins.slice(4), ...pins.slice(4), ...springs.slice(4)];
   return {
-    root, pan, tilt, head, meta, st, eyeU,
-    parts: { base, lid, arm, headMount, coreFront, coreBack, bezel, screen, ledGroup, fins, pins, springs, ring, tiltServo },
-    materials: { silver, black, blackSatin, bezelMat, screenMat, hidden, steel }, tipU,
-    setOpen, setMood, setGlow, update,
+    root, pan, panInner, tilt, head, meta, look, eyeU, tipU, frontSet, backSet,
+    parts: { base, lid, arm, headMount, coreFront, coreBack, bezel, screen, screenSurround, ledGroup, fins, pins, springs, ring, tiltServo, eyeLight, wellLight },
+    materials: { silver, black, blackSatin, bezelMat, screenMat, hidden, steel, pcbBlack, servoMat },
+    setOpen, update, get open() { return shellOpen; },
   };
 }
