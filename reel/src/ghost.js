@@ -89,15 +89,16 @@ function brushedUV(geometry) {
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
 }
 
-function springGeometry(coils = 6.5, radius = 5.7, wire = 0.62) {
-  // unit-length helix along +z; scaled in z to the live spring length
+const SPRING_L = 15;
+function springGeometry(coils = 6.5, radius = 5.7, wire = 0.55) {
+  // helix along +z at a nominal 15 mm, scaled in z to the live spring length (9 mm shut, 21 mm open)
   class Helix extends THREE.Curve {
     getPoint(u, target = new THREE.Vector3()) {
       const a = u * coils * Math.PI * 2;
-      return target.set(Math.cos(a) * radius, Math.sin(a) * radius, u);
+      return target.set(Math.cos(a) * radius, Math.sin(a) * radius, u * SPRING_L);
     }
   }
-  return new THREE.TubeGeometry(new Helix(), 220, wire, 8, false);
+  return new THREE.TubeGeometry(new Helix(), 260, wire, 8, false);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -107,7 +108,7 @@ export function buildGhost({ meta, geo }) {
 
   // ---- materials ----------------------------------------------------------------------
   const silver = new THREE.MeshPhysicalMaterial({
-    color: 0xd3d6db, metalness: 1.0, roughness: 0.66, roughnessMap: brushed,
+    color: 0xe4e6ea, metalness: 1.0, roughness: 0.66, roughnessMap: brushed,
     anisotropy: 0.5, envMapIntensity: 1.0,
   });
   const black = new THREE.MeshPhysicalMaterial({ color: 0x111113, metalness: 0.0, roughness: 0.62, envMapIntensity: 0.9 });
@@ -230,7 +231,7 @@ export function buildGhost({ meta, geo }) {
       fins[i].position.copy(d).multiplyScalar(travel);
       pins[i].position.copy(d).multiplyScalar(meta.pin_cap_closed + travel);
       const r0 = meta.core_r - 0.3, r1 = meta.core_r + meta.closed_gap + meta.spring_seat_depth + travel;
-      springs[i].position.copy(d).multiplyScalar(r0); springs[i].scale.set(1, 1, r1 - r0);
+      springs[i].position.copy(d).multiplyScalar(r0); springs[i].scale.set(1, 1, (r1 - r0) / SPRING_L);
     }
     ring.position.set(0, 0, THREE.MathUtils.lerp(meta.ring_z_closed, meta.ring_z_open, f) - meta.ring_t / 2);
   }
@@ -259,7 +260,7 @@ export function buildGhost({ meta, geo }) {
     u.uTime.value = t; u.uCol.value.copy(cur.col); u.uPower.value = st.eyePower;
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(eyeRT); renderer.render(eyeScene, eyeCam); renderer.setRenderTarget(prev);
-    screenMat.emissiveIntensity = 1.3 * st.glow;
+    screenMat.emissiveIntensity = 0.62 * st.glow;
     // lights.py: k = 0.6 + 0.15*sin(t*1.6 + phase) for the resting moods
     for (let i = 0; i < 16; i++) {
       const k = (0.6 + 0.15 * Math.sin(t * 1.6 + (i / 16) * Math.PI * 2)) * st.ledLevel;
@@ -268,7 +269,7 @@ export function buildGhost({ meta, geo }) {
     bezelMat.emissive.copy(cur.led); bezelMat.emissiveIntensity = 0.8 * st.ledLevel * st.glow;
     eyeLight.color.copy(cur.led).lerp(cur.col, 0.5);
     eyeLight.intensity = 1.0e4 * st.glow * (0.55 * st.ledLevel + 0.45 * st.eyePower);
-    wellLight.color.copy(cur.col); wellLight.intensity = 260 * st.glow * st.eyePower;
+    wellLight.color.copy(cur.col); wellLight.intensity = 150 * st.glow * st.eyePower;
   }
 
   setOpen(0); setMood('neutral', 1);

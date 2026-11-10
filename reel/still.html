@@ -36,9 +36,11 @@ const LOOKS = {
   // pre-drop mood: shell shut, glow kept faint
   closed: { open: 0, mood: 'neutral', eyePower: 0.6, ledLevel: 0.4, glow: 0.6, bloom: 0.4, exposure: 1.0, pan: -6, tilt: 0 },
   // post-drop hero: shell sprung open 12 mm, eye and ring at full
-  open: { open: 1, mood: 'excited', eyePower: 1, ledLevel: 1, glow: 1.0, bloom: 0.5, exposure: 1.0, pan: -6, tilt: 2 },
+  open: { open: 1, mood: 'excited', eyePower: 1, ledLevel: 1, glow: 1.0, bloom: 0.42, exposure: 1.0, pan: -6, tilt: 2 },
 };
-const L = LOOKS[state];
+const L = { ...LOOKS[state] };
+for (const k of ['pan', 'tilt', 'bloom', 'glow', 'eyePower', 'ledLevel']) if (q.has(k)) L[k] = +q.get(k);
+if (q.has('mood')) L.mood = q.get('mood');
 ghost.setOpen(L.open); ghost.setMood(L.mood, 1); ghost.setGlow(L);
 ghost.pan.rotation.y = THREE.MathUtils.degToRad(L.pan); ghost.tilt.rotation.x = THREE.MathUtils.degToRad(-L.tilt);
 post.bloom.strength = L.bloom; post.grade.uniforms.uExposure.value = L.exposure;

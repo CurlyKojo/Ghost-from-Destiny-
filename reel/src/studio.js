@@ -30,7 +30,7 @@ export function buildEnvironment(renderer, k = 1) {
   add(4, 16, 20, [-13, 5, -10], [0.86, 0.93, 1.0], 0.3);     // rim, back left: the strong one
   add(4, 12, 5.0, [14, 3, -8], [0.80, 0.90, 1.0], 0.3);      // kicker, back right
   add(18, 12, 0.85, [1, 15, 3], [1.0, 0.98, 0.96], 0.45);    // overhead softbox
-  add(24, 20, 0.42, [7, 2, 16], [1.0, 1.0, 1.0], 0.45);      // front fill, big and dim
+  add(24, 20, 0.72, [7, 2, 16], [1.0, 1.0, 1.0], 0.45);      // front fill, big and dim
   add(1.4, 14, 2.6, [-12, 0, 11], [1.0, 0.97, 0.94], 0.3);   // thin strip: edge pings on the bevels
   add(1.2, 12, 1.6, [13, 1, 10], [0.9, 0.95, 1.0], 0.3);     // its twin on the right
   add(30, 5, 0.45, [0, -7, 12], [0.7, 0.8, 1.0], 0.4);       // low bounce off the floor
@@ -125,7 +125,7 @@ export function buildStudio(renderer, scene, { floorY, width, height }) {
   rim.shadow.bias = -0.0006; rim.shadow.normalBias = 0.6;
   const kicker = new THREE.DirectionalLight(0xbfd8ff, 0.9);
   kicker.position.set(520, 180, -380); kicker.target.position.set(0, -20, -30);
-  const fill = new THREE.DirectionalLight(0xfff4ea, 0.5);
+  const fill = new THREE.DirectionalLight(0xfff4ea, 0.7);
   fill.position.set(260, 220, 600); fill.target.position.set(0, -30, 0);
   const top = new THREE.DirectionalLight(0xffffff, 0.3);
   top.position.set(40, 700, 60); top.target.position.set(0, -100, -40);
