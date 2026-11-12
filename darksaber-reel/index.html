@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Darksaber reel</title>
+<style>
+@font-face{font-family:'Anton';font-weight:400;src:url(node_modules/@fontsource/anton/files/anton-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter Tight';font-weight:700;src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Inter Tight';font-weight:800;src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-800-normal.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-weight:700;src:url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-700-normal.woff2) format('woff2')}
+html,body{margin:0;background:#000;overflow:hidden}
+canvas{display:block;position:absolute;left:0;top:0}
+#help{position:fixed;left:12px;bottom:10px;font:12px system-ui;color:#9aa;z-index:5}
+</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<script type="module">
+// Capture:  index.html?capture=1[&scale=0.5]  then window.renderFrame(i) / window.renderTime(t)
+// Preview:  index.html   (space plays with sound, arrows step 0.1 s)
+import * as THREE from 'three';
+import { loadSaber, buildSaber } from './src/saber.js';
+import { buildStudio, buildPost } from './src/studio.js';
+import { create2D } from './src/scene2d.js';
+
+const q = new URLSearchParams(location.search);
+const capture = q.has('capture');
+const scale = +(q.get('scale') || (capture ? 1 : Math.min(1, (innerHeight - 4) / 1920)));
+const W = Math.round(1080 * scale), H = Math.round(1920 * scale);
+const T = await fetch('timing.json').then((r) => r.json());
+const FPS = T.fps, FRAMES = Math.round(T.duration * FPS);
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.setClearColor(0x000000, 0);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.VSMShadowMap; renderer.toneMapping = THREE.NoToneMapping;
+document.body.appendChild(renderer.domElement);
+const c2d = document.createElement('canvas'); c2d.width = W; c2d.height = H; document.body.appendChild(c2d);
+
+const assets = await loadSaber();
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(24, W / H, 50, 14000); camera.layers.enable(1);
+const saber = buildSaber(assets);
+scene.add(saber.root); for (const g of saber.ghosts) scene.add(g);
+const FLOOR_Y = -335;
+const studio = buildStudio(renderer, scene, { floorY: FLOOR_Y, width: W, height: H });
+const post = buildPost(renderer, scene, camera, W, H);
+await document.fonts.ready;
+await Promise.all(['400 100px Anton', '700 40px "Inter Tight"', '700 30px "JetBrains Mono"'].map((f) => document.fonts.load(f)));
+const two = create2D(c2d, assets.outlines, T, scale);
+
+// ---- 3D shots ---------------------------------------------------------------------------------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x)), lerp = (a, b, k) => a + (b - a) * k;
+const smooth = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
+const easeOut = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const easeInOut = (x) => { x = clamp(x); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const deg = THREE.MathUtils.degToRad, noise = (t, k) => Math.sin(t * 91.7 + k * 1.3) * 0.6 + Math.sin(t * 57.3 + k * 4.1) * 0.4;
+const tgt = new THREE.Vector3(), tmp = new THREE.Vector3();
+
+// swing angle: 90 deg (blade up) -> 0 (blade to the right), with a small overshoot and settle
+function swingAngle(t) {
+  const [a, b] = T.swing, u = clamp((t - a) / (b - a));
+  const k = easeInOut(u), over = Math.sin(clamp((u - 0.72) / 0.28) * Math.PI) * 4.5 * (u > 0.72 ? 1 : 0);
+  return 90 * (1 - k) - over;
+}
+function pose3d(t) {
+  const s = t - T.ignite, [sw0, sw1] = T.swing, u = clamp((t - sw0) / (sw1 - sw0)), k = easeInOut(u), sT = t - T.title;
+  // blade
+  const p = clamp(s / T.igniteLen), front = s < 0 ? 0 : 66 + 690 * Math.pow(p, 0.85);
+  const power = s < 0 ? 0 : 1 + 0.6 * Math.exp(-5.5 * s) + 0.1 * Math.sin(u * Math.PI);
+  saber.setBlade({ front, power, time: t });
+  // pose
+  saber.root.rotation.z = deg(swingAngle(t));
+  const hold = smooth(s / (sw0 - T.ignite));
+  saber.body.rotation.x = deg(lerp(lerp(-26, 6, hold), 24, k) + 2.5 * Math.sin(Math.max(sT, 0) * 0.9));
+  // ghosts: the blade's light a few hundredths of a second ago
+  const speed = Math.abs(swingAngle(t + 0.005) - swingAngle(t - 0.005)) / 0.01 / 260;
+  saber.ghosts.forEach((g, i) => {
+    const tt = t - (i + 1) * 0.0042; g.visible = u > 0 && u < 1 && speed > 0.04;
+    g.rotation.z = deg(swingAngle(tt)); g.userData.tw.rotation.x = saber.body.rotation.x; g.userData.mat.uniforms.uGhost.value = 0.2 * speed * (1 - i / 21);
+  });
+  // camera: stands back for the ignition, then drops in on the emitter as the blade comes round
+  const dV = lerp(2450, 2080, easeOut(s / (sw0 - T.ignite))), dH = 1420 - 130 * easeOut(Math.max(sT, 0) / 3.2);
+  const d = lerp(dV, dH, k);
+  tgt.set(lerp(0, 96, k), lerp(238, 0, k), 0);
+  const az = deg(lerp(-7, 9, k) + 1.5 * Math.sin(t * 0.7)), el = deg(lerp(2, 3, k));
+  camera.position.set(tgt.x + d * Math.sin(az) * Math.cos(el), tgt.y + d * Math.sin(el), tgt.z + d * Math.cos(az) * Math.cos(el));
+  const punch = 0.07 * Math.exp(-7 * Math.max(s, 0)) * (s >= 0 ? 1 : 0) + 0.05 * Math.exp(-8 * Math.max(sT, 0)) * (sT >= 0 ? 1 : 0);
+  const shake = (s >= 0 ? 16 * Math.exp(-7 * s) : 0) + (sT >= 0 ? 7 * Math.exp(-7 * sT) : 0);
+  camera.position.add(tmp.set(noise(t, 1), noise(t, 2), 0).multiplyScalar(shake));
+  camera.fov = 24 * (1 - punch); camera.near = 50; camera.far = 14000; camera.lookAt(tgt); camera.updateProjectionMatrix();
+  camera.projectionMatrix.elements[9] = -2 * lerp(0, 0.13, k); camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+  camera.updateMatrixWorld(true);
+  // light: the room is nearly black; the blade is the key light
+  const lit = s < 0 ? 0 : clamp(p);
+  studio.setLevel(lerp(0.03, 0.10, lit), { rimK: lerp(0.3, 1.0, lit), hazeK: lerp(0.08, 0.5, lit) * (0.94 + 0.06 * Math.sin(t * 37)), envK: lerp(0.08, 0.34, lit) });
+  post.bloom.strength = 0.78 + (s >= 0 ? 0.5 * Math.exp(-5 * s) : 0) - 0.22 * Math.sin(u * Math.PI);
+  post.bloom.radius = 0.85; post.bloom.threshold = 1.0;
+  const U = post.grade.uniforms;
+  U.uExposure.value = 1.05; U.uSat.value = 1.08; U.uVignette.value = 0.95; U.uFlash.value = s >= 0 ? 0.03 * Math.exp(-15 * s) : 0;
+  post.dof.uniforms.uAperture.value = lerp(0, 1.2, k); post.dof.uniforms.uFocus.value = d;
+  return { flick: 0.5 + 0.5 * Math.sin(t * 23) * Math.sin(t * 7.1) };
+}
+// saber-frame point -> stage px (1080 x 1920), through the current camera
+function proj(x, y) {
+  saber.root.updateMatrixWorld(true);
+  tmp.set(x, y, 0).applyMatrix4(saber.inner.matrixWorld).project(camera);
+  return [(tmp.x * 0.5 + 0.5) * 1080, (1 - (tmp.y * 0.5 + 0.5)) * 1920];
+}
+
+function frame(t) {
+  t = clamp(t, 0, T.duration - 1e-4);
+  if (t < T.dark[0]) { two.draw(t); return '2d'; }
+  if (t < T.dark[1]) { pose3d(T.ignite - 0.001); two.draw(t, { proj }); return 'dark'; }
+  const st = pose3d(t);
+  post.render(t);
+  two.draw(t, { flick: st.flick, emitPx: proj(90, 0) });
+  return '3d';
+}
+window.reel = { FPS, FRAMES, T };
+window.renderFrame = (i) => { const r = frame(i / FPS); renderer.getContext().finish(); return r; };
+window.renderTime = (t) => { const r = frame(t); renderer.getContext().finish(); return r; };
+frame(0);
+window.__ready = true;
+
+if (!capture) {
+  const help = document.createElement('div'); help.id = 'help'; help.textContent = 'space: play/pause   ← →: step 0.1 s'; document.body.appendChild(help);
+  const audio = new Audio('assets/sfx.wav');
+  let playing = false, t = 0, last = performance.now();
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') { playing = !playing; last = performance.now(); if (playing) { audio.currentTime = t; audio.play(); } else audio.pause(); }
+    if (e.key === 'ArrowRight') t = Math.min(T.duration - 0.01, t + 0.1);
+    if (e.key === 'ArrowLeft') t = Math.max(0, t - 0.1);
+    if (!playing) frame(t);
+  });
+  (function loop() { requestAnimationFrame(loop); if (!playing) return; const now = performance.now(); t += (now - last) / 1000; last = now; if (t >= T.duration) { t = 0; audio.currentTime = 0; } frame(t); })();
+}
+</script>
+</body>
+</html>
