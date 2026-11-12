@@ -25,7 +25,7 @@ export async function loadSaber(base = 'assets/') {
 // The COB strip sits on the edge of the black core and faces out, so the shell glows in the
 // band between core and edge and round the tip, and stays dark over the core: the Darksaber look.
 const BLADE_GLSL = /* glsl */`
-  uniform float uFront, uPower, uTime, uCoreX1;
+  uniform float uFront, uPower, uTime, uCoreX1, uFake;
   varying vec3 vSaber;
   float hash1(float n) { return fract(sin(n) * 43758.5453); }
   float vnoise(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(hash1(i), hash1(i + 1.0), f); }
@@ -48,14 +48,14 @@ export function buildSaber({ meta, geo }) {
   const inner = new THREE.Group(); inner.position.x = -PIVOT_X; body.add(inner);
   const mesh = (g, m, name) => { const o = new THREE.Mesh(g, m); o.name = name; o.castShadow = o.receiveShadow = true; inner.add(o); return o; };
 
-  const U = { uFront: { value: 0 }, uPower: { value: 0 }, uTime: { value: 0 }, uCoreX1: { value: 685 - 9 * Math.SQRT2 } };
+  const U = { uFront: { value: 0 }, uPower: { value: 0 }, uTime: { value: 0 }, uCoreX1: { value: 685 - 9 * Math.SQRT2 }, uFake: { value: 1 } };
   // ---- blade shell: frosted white PETG; emissive pattern from the strip inside ----------------
   const shellMat = new THREE.MeshPhysicalMaterial({ color: 0xc9ced6, roughness: 0.42, metalness: 0, clearcoat: 0.35, clearcoatRoughness: 0.35 });
   shellMat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vSaber;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvSaber = position;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + BLADE_GLSL)
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(0.16, 1.0, smoothstep(-1.5, 1.0, coreSd(vSaber.xy))) * mix(1.0, 0.02, clamp(uPower, 0.0, 1.0) * smoothstep(uFront, uFront - 26.0, vSaber.x));')      // the black core shows through
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(1.0, mix(0.16, 1.0, smoothstep(-1.5, 1.0, coreSd(vSaber.xy))), uFake) * mix(1.0, 0.02, clamp(uPower, 0.0, 1.0) * smoothstep(uFront, uFront - 26.0, vSaber.x));')      // the black core shows through
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.86, 0.93, 1.0) * bladeGlow(vSaber) * 4.4;');
   };
   const shells = ['shell1', 'shell2', 'shell3'].map((n) => mesh(geo[n], shellMat, n));
@@ -70,28 +70,35 @@ export function buildSaber({ meta, geo }) {
   const plug = mesh(geo.plug, hiltLite, 'plug');
   // stand-ins -------------------------------------------------------------------------------
   const standIn = new THREE.Group(); standIn.name = 'hilt_stand_in'; inner.add(standIn);
-  const oct = (x0, x1, hy, hz, mat) => {            // octagonal bar along x
+  const grip = new THREE.Group(), pommel = new THREE.Group(); standIn.add(grip, pommel);
+  const oct = (parent, x0, x1, hy, hz, mat) => {            // octagonal bar along x
     const g = new THREE.CylinderGeometry(1, 1, x1 - x0, 8, 1); g.rotateY(Math.PI / 8); g.rotateZ(Math.PI / 2);
     const k = Math.cos(Math.PI / 8); g.scale(1, hy / k, hz / k);
-    const m = new THREE.Mesh(g, mat); m.position.set((x0 + x1) / 2, 0, 0); m.castShadow = m.receiveShadow = true; standIn.add(m); return m;
+    const m = new THREE.Mesh(g, mat); m.position.set((x0 + x1) / 2, 0, 0); m.castShadow = m.receiveShadow = true; parent.add(m); return m;
   };
-  oct(-118, 8, 15, 12.6, hiltMat);                                   // grip
-  oct(-214, -118, 13.2, 11, hiltMat);                                // ringed section's core
-  for (let i = 0; i < 6; i++) oct(-212 + i * 16, -212 + i * 16 + 9.5, 17, 14.6, i % 2 ? hiltMat : hiltLite);
-  oct(-228, -214, 15.5, 13, hiltLite);                               // pommel
+  oct(grip, -118, 8, 15, 12.6, hiltMat);
   for (const z of [12.9, -12.9]) for (const [x0, x1, y] of [[-104, -8, 6.5], [-92, -8, 0], [-80, -8, -6.5]]) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 1.6, 0.9), hiltLite); s.position.set((x0 + x1) / 2, y, z); standIn.add(s);
+    const st = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 1.6, 0.9), hiltLite); st.position.set((x0 + x1) / 2, y, z); grip.add(st);
   }
+  oct(pommel, -214, -118, 13.2, 11, hiltMat);                        // ringed section's core
+  for (let i = 0; i < 6; i++) oct(pommel, -212 + i * 16, -212 + i * 16 + 9.5, 17, 14.6, i % 2 ? hiltMat : hiltLite);
+  oct(pommel, -228, -214, 15.5, 13, hiltLite);
   // guard: a slanted racetrack plate the hilt passes through, parallel to the emitter's rear face
   const cap = new THREE.Shape(); const GL = 150, GW = 46, r = GW / 2;
   cap.moveTo(-GL / 2 + r, -r); cap.lineTo(GL / 2 - r, -r); cap.absarc(GL / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2, false);
   cap.lineTo(-GL / 2 + r, r); cap.absarc(-GL / 2 + r, 0, r, Math.PI / 2, Math.PI * 1.5, false);
-  const guard = new THREE.Mesh(new THREE.ExtrudeGeometry(cap, { depth: 5, bevelEnabled: true, bevelThickness: 1.6, bevelSize: 1.6, bevelSegments: 3, curveSegments: 24 }), hiltLite);
-  guard.geometry.translate(0, 0, -2.5);
-  // shape plane: local x = long axis, local y = width (-> saber z), local z = thickness (-> plate normal)
+  const guardMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(cap, { depth: 5, bevelEnabled: true, bevelThickness: 1.6, bevelSize: 1.6, bevelSegments: 3, curveSegments: 24 }), hiltLite);
+  guardMesh.geometry.translate(0, 0, -2.5);
   const u = new THREE.Vector3(30, -51.2, 0).normalize(), w = new THREE.Vector3(0, 0, 1), nrm = new THREE.Vector3().crossVectors(u, w);
-  guard.matrixAutoUpdate = false; guard.matrix.makeBasis(u, w, nrm).setPosition(9, -3, 0); guard.castShadow = guard.receiveShadow = true;
-  standIn.add(guard);
+  guardMesh.matrixAutoUpdate = false; guardMesh.matrix.makeBasis(u, w, nrm).setPosition(9, -3, 0); guardMesh.castShadow = guardMesh.receiveShadow = true;
+  const guard = new THREE.Group(); guard.add(guardMesh); standIn.add(guard);
+
+  // LED strip on the core's edge (bought part): a thin ribbon that can be drawn on
+  const ledCurve = new THREE.CatmullRomCurve3(meta.led.map((p) => new THREE.Vector3(p[0], p[1] + Math.sign(p[1]) * 0.9, 0)), false, 'catmullrom', 0.0);
+  const LED_SEG = 400, LED_RAD = 6;
+  const ledGeo = new THREE.TubeGeometry(ledCurve, LED_SEG, 1.5, LED_RAD); ledGeo.scale(1, 1, 1.7);
+  const strip = mesh(ledGeo, new THREE.MeshStandardMaterial({ color: 0xe9dc8a, roughness: 0.45, emissive: 0x2a2610 }), 'led_strip'); strip.castShadow = false;
+  const setStrip = (k) => ledGeo.setDrawRange(0, Math.round(LED_SEG * Math.min(1, Math.max(0, k))) * LED_RAD * 6);
 
   // ---- light the blade throws ---------------------------------------------------------------
   const lights = [];
@@ -121,5 +128,16 @@ export function buildSaber({ meta, geo }) {
     for (const l of lights) l.intensity = 1.7e5 * power * flick * THREE.MathUtils.smoothstep(front, l.userData.x - 30, l.userData.x + 30);
     back.intensity = 7e4 * power * flick * THREE.MathUtils.smoothstep(front, 200, 420);
   }
-  return { root, body, inner, shells, cores, emitter, plug, standIn, lights, ghosts, U, setBlade, PIVOT_X, materials: { shellMat, hiltMat, hiltLite } };
+  // shell look: 'clear' = see-through PETG for the assembly shot, 'lit' = the approved blade look
+  function setShellMode(mode) {
+    const clear = mode === 'clear';
+    if (shellMat.transparent !== clear) { shellMat.transparent = clear; shellMat.needsUpdate = true; }
+    shellMat.opacity = clear ? 0.78 : 1; shellMat.depthWrite = !clear; U.uFake.value = clear ? 0 : 1;
+    shellMat.color.set(clear ? 0xf2f6fb : 0xc9ced6); shellMat.roughness = clear ? 0.2 : 0.42; shellMat.clearcoat = clear ? 0.8 : 0.35;
+    for (const sh of shells) sh.renderOrder = clear ? 5 : 0;
+    strip.visible = clear;
+  }
+  const coreByName = Object.fromEntries(cores.map((c) => [c.name, c]));
+  const pieces = { shells, cores: coreByName, emitter, plug, guard, grip, pommel, strip };
+  return { root, body, inner, shells, cores, emitter, plug, standIn, lights, ghosts, U, setBlade, setShellMode, setStrip, pieces, PIVOT_X, materials: { shellMat, hiltMat, hiltLite } };
 }

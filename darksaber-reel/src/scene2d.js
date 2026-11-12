@@ -16,8 +16,17 @@ const WHITE = '#f4f8ff', ICE = '#bfe6ff', HOT = '#ffb347', BG = '#030509';
 const STEPS = ['PRINT', 'ASSEMBLE', 'SOLDER', 'IGNITE'];
 
 export function create2D(canvas, O, T, scale) {
-  const ctx = canvas.getContext('2d');
+  const mainCtx = canvas.getContext('2d'); let ctx = mainCtx;
   const W = 1080, H = 1920;
+  // a finished frame of one shot, kept as an image so it can dissolve over the 3D
+  const stills = {};
+  function still(key, fn) {
+    if (!stills[key]) {
+      const c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height;
+      ctx = c.getContext('2d'); ctx.setTransform(scale, 0, 0, scale, 0, 0); fn(); ctx = mainCtx; stills[key] = c;
+    }
+    return stills[key];
+  }
 
   // ---- drawing helpers ----------------------------------------------------------------------
   // tf: {cx, y0, x0, s, rot?}: saber mm -> px.  Blade-up: X = cx - y*s, Y = y0 - (x - x0)*s
@@ -248,13 +257,13 @@ export function create2D(canvas, O, T, scale) {
   function assemble(t) {
     const [t0, t1] = T.assemble, s = t - t0, len = t1 - t0;
     background(t);
-    tracker(t, 1); bigWord('ASSEMBLE', 'CORE · 1.2 M LED · SHELL', s, len);
+    tracker(t, 1); bigWord('ASSEMBLE', 'CORE · 1.2 M LED · SHELL', s, T.build[1] - t0);
     // the line-up drops away
     const gone = easeIn(s / 0.12);
     if (gone < 1) parts.forEach((p) => strokePart(p, { ...p.line, y0: p.line.y0 + 260 * gone }, 1 - gone, 3));
     const tf0 = asmTf(t);
     // punch in toward the emitter at the very end (hands over to the solder shot)
-    const z = easeIn((s - (len - 0.14)) / 0.14), tf = { cx: 540, y0: lerp(tf0.y0, 770, z), x0: lerp(tf0.x0, 58, z), s: lerp(tf0.s, 3.4, z), rot: ASM_ROT * (1 - z) };
+    const z = 0, tf = { cx: 540, y0: lerp(tf0.y0, 770, z), x0: lerp(tf0.x0, 58, z), s: lerp(tf0.s, 3.4, z), rot: ASM_ROT * (1 - z) };
     const arrive = (at, d = 0.13) => back((t - at) / d, 1.5);
     const cores = T.coreIn.map((at) => (t < at ? 0 : arrive(at)));
     const led = t < T.led[0] ? 0 : easeInOut((t - T.led[0]) / (T.led[1] - T.led[0]));
@@ -411,11 +420,26 @@ export function create2D(canvas, O, T, scale) {
     }
   }
 
+  // over the 3D assembly shot: the step label stays; the diagram dissolves out at the start
+  // and the solder shot's cut-away dissolves in at the end
+  function buildOverlay(t) {
+    const [b0, b1] = T.build, s = t - b0, len = b1 - b0;
+    const g = ctx.createLinearGradient(0, 1100, 0, 1920); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.45, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0.8)');
+    ctx.fillStyle = g; ctx.fillRect(0, 1100, W, 820);
+    tracker(t, 1); bigWord('ASSEMBLE', '12 PRINTED PARTS · SNAP FIT', t - T.assemble[0], b1 - T.assemble[0]);
+    const lock = t - T.buildLock;
+    if (lock >= 0 && lock < 0.25) { ctx.fillStyle = `rgba(225,240,255,${0.06 * Math.exp(-lock * 16)})`; ctx.fillRect(0, 0, W, H); }
+    const draw1 = (img, a) => { if (a <= 0) return; ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = a; ctx.drawImage(img, 0, 0); ctx.restore(); };
+    draw1(still('asmEnd', () => assemble(T.assemble[1] - 0.001)), 1 - smooth(s / 0.24));
+    draw1(still('solderStart', () => solder(T.solder[0])), smooth((s - (len - 0.2)) / 0.2));
+  }
+
   function draw(t, { proj, flick = 0, emitPx = null } = {}) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0); ctx.clearRect(0, 0, W, H);
     if (t < T.hook[1]) hook(t);
     else if (t < T.print[1]) print(t);
     else if (t < T.assemble[1]) assemble(t);
+    else if (t < T.build[1]) buildOverlay(t);
     else if (t < T.solder[1]) solder(t);
     else if (t < T.dark[1]) dark(t, proj);
     else {

@@ -86,6 +86,21 @@ for at in T["shellIn"]:
 put(wet, T["emitterIn"] + 0.1, thump(72, 0.3, 0.08), 0.8); put(dry, T["emitterIn"] + 0.1, click(1400, 0.04), 0.5)
 put(dry, T["plugIn"] + 0.1, click(2600, 0.025), 0.4)
 
+# ---- the 3D assembly: the real pieces seating, heavier as the big parts arrive ------------------
+b0 = T["build"][0]
+put(dry, b0 - 0.1, whoosh(0.3, 200, 2600), 0.55); put(wet, b0, thump(70, 0.35, 0.1), 0.6)
+for at in T["buildCores"]:
+    put(dry, at + 0.11, click(3400, 0.018), 0.36); put(dry, at + 0.11, thump(210, 0.06, 0.018, 0.2), 0.3)
+l0, l1 = T["buildLed"]; d = l1 - l0; t = tt(d)
+put(wet, l0, np.sin(2 * np.pi * np.cumsum(600 * 3.0 ** (t / d)) / SR) * (0.6 + 0.4 * np.sin(2 * np.pi * 30 * t)) * np.sin(np.pi * t / d), 0.12)
+for at in T["buildShells"]:
+    put(dry, at, whoosh(0.15, 900, 4200), 0.35); put(dry, at + 0.14, click(1700, 0.035), 0.5); put(wet, at + 0.14, thump(120, 0.18, 0.05), 0.6)
+put(dry, T["buildPlug"] + 0.11, click(2600, 0.025), 0.45)
+for key, f, g in (("buildEmitter", 78, 0.95), ("buildGuard", 96, 0.75), ("buildGrip", 70, 0.9), ("buildPommel", 60, 1.0)):
+    put(wet, T[key] + 0.11, thump(f, 0.32, 0.085), g); put(dry, T[key] + 0.11, click(1300, 0.045), 0.55)
+put(wet, T["buildLock"], thump(50, 0.6, 0.16, 0.7), 1.1)
+for fr, gain in ((880, 0.12), (1320, 0.09), (1760, 0.06)): put(wet, T["buildLock"], blip(fr, 0.5, 0.14), gain)
+
 # ---- solder: sizzle on each joint, the switch, power running up --------------------------------
 for at in T["joints"]:
     d = 0.3; sz = hp(noise(d), 4200) * decay(d, 0.09) * (0.5 + 0.5 * (rng.random(int(d * SR)) > 0.75))
@@ -140,4 +155,4 @@ os.makedirs(os.path.join(HERE, "..", "assets"), exist_ok=True)
 with wave.open(os.path.join(HERE, "..", "assets", "sfx.wav"), "wb") as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((st * 32767).astype("<i2").tobytes())
 rms = lambda a, b: 20 * np.log10(np.sqrt(np.mean(st[int(a * SR): int(b * SR)] ** 2)) + 1e-9)
-print(f"wrote assets/sfx.wav  {N / SR:.2f}s   build {rms(0.9, 5.0):.1f} dB   ignition {rms(T['ignite'], T['ignite'] + 0.5):.1f} dB   hum {rms(6.3, 7.3):.1f} dB   title {rms(T['title'], T['title'] + 0.5):.1f} dB")
+print(f"wrote assets/sfx.wav  {N / SR:.2f}s   build {rms(0.9, T["dark"][0]):.1f} dB   ignition {rms(T['ignite'], T['ignite'] + 0.5):.1f} dB   hum {rms(T["ignite"] + 0.8, T["ignite"] + 1.8):.1f} dB   title {rms(T['title'], T['title'] + 0.5):.1f} dB")

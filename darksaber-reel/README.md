@@ -1,8 +1,9 @@
 # Darksaber teaser reel
 
-An 11.5-second Instagram reel (1080x1920, 30 fps) for the Darksaber LED blade project:
-line-art build (print, assemble, solder), lights out, the blade ignites standing up, swings
-level as the camera drops in, title.
+A 13.6-second Instagram reel (1080x1920, 30 fps) for the Darksaber LED blade project:
+line-art build (print, assemble), the real printed pieces snapping together in 3D, the
+solder cut-away, lights out, the blade ignites standing up, swings level as the camera
+drops in, title.
 
 - `video/darksaber_reel.mp4` is the cut, with its own synthesised sound.
 - The drawings and the 3D blade, core, emitter and plug come from the project's 12 STLs.
