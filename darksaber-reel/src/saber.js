@@ -81,17 +81,37 @@ export function buildSaber({ meta, geo }) {
     const st = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 1.6, 0.9), hiltLite); st.position.set((x0 + x1) / 2, y, z); grip.add(st);
   }
   oct(pommel, -214, -118, 13.2, 11, hiltMat);                        // ringed section's core
-  for (let i = 0; i < 6; i++) oct(pommel, -212 + i * 16, -212 + i * 16 + 9.5, 17, 14.6, i % 2 ? hiltMat : hiltLite);
-  oct(pommel, -228, -214, 15.5, 13, hiltLite);
-  // guard: a slanted racetrack plate the hilt passes through, parallel to the emitter's rear face
-  const cap = new THREE.Shape(); const GL = 150, GW = 46, r = GW / 2;
-  cap.moveTo(-GL / 2 + r, -r); cap.lineTo(GL / 2 - r, -r); cap.absarc(GL / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2, false);
-  cap.lineTo(-GL / 2 + r, r); cap.absarc(-GL / 2 + r, 0, r, Math.PI / 2, Math.PI * 1.5, false);
-  const guardMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(cap, { depth: 5, bevelEnabled: true, bevelThickness: 1.6, bevelSize: 1.6, bevelSegments: 3, curveSegments: 24 }), hiltLite);
-  guardMesh.geometry.translate(0, 0, -2.5);
-  const u = new THREE.Vector3(30, -51.2, 0).normalize(), w = new THREE.Vector3(0, 0, 1), nrm = new THREE.Vector3().crossVectors(u, w);
-  guardMesh.matrixAutoUpdate = false; guardMesh.matrix.makeBasis(u, w, nrm).setPosition(9, -3, 0); guardMesh.castShadow = guardMesh.receiveShadow = true;
-  const guard = new THREE.Group(); guard.add(guardMesh); standIn.add(guard);
+  for (let i = 0; i < 7; i++) oct(pommel, -211 + i * 13.4, -211 + i * 13.4 + 8.6, 17, 14.6, i % 2 ? hiltMat : hiltLite);
+  { const g = new THREE.CylinderGeometry(0.62, 1, 16, 8, 1); g.rotateY(Math.PI / 8); g.rotateZ(Math.PI / 2); const k = Math.cos(Math.PI / 8); g.scale(1, 16 / k, 13.4 / k);
+    const m = new THREE.Mesh(g, hiltMat); m.position.set(-221, 0, 0); m.castShadow = true; pommel.add(m); }
+  // guard: the L-shaped piece.  A flat arm lies along the emitter's slanted rear face, from
+  // above the hilt down past its underside, then bends forward into a rounded foot.
+  // Proportions measured off the owner's photo of the printed hilt (side view).
+  const GW = 44, GT = 4.6, ARM = 100, FOOT = 47;
+  const tongue = (len) => {                        // strip with one square end (at 0) and one round end
+    const sh = new THREE.Shape(), r = GW / 2;
+    sh.moveTo(0, -r); sh.lineTo(len - r, -r); sh.absarc(len - r, 0, r, -Math.PI / 2, Math.PI / 2, false); sh.lineTo(0, r); sh.closePath();
+    const g = new THREE.ExtrudeGeometry(sh, { depth: GT - 2.4, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 1.2, bevelSegments: 3, curveSegments: 28 });
+    g.translate(0, 0, -(GT - 2.4) / 2); return g;
+  };
+  const place = (geo, origin, dir) => {            // local x -> dir (in the side-view plane), local y -> saber z
+    const m = new THREE.Mesh(geo, hiltMat), z = new THREE.Vector3(0, 0, 1), n = new THREE.Vector3().crossVectors(dir, z);
+    m.matrixAutoUpdate = false; m.matrix.makeBasis(dir, z, n).setPosition(origin); m.castShadow = m.receiveShadow = true; return m;
+  };
+  const bend = new THREE.Vector3(28, -33, 0);
+  const armDir = new THREE.Vector3(-30, 51.2, 0).normalize();                      // up and back, 59.6 deg to the axis
+  const footDir = new THREE.Vector3(Math.cos(-0.16), Math.sin(-0.16), 0);          // forward, dipping 9 deg
+  const guard = new THREE.Group();
+  guard.add(place(tongue(ARM), bend, armDir), place(tongue(FOOT), bend, footDir));
+  const knee = new THREE.Mesh(new THREE.CylinderGeometry(GT / 2 + 0.5, GT / 2 + 0.5, GW + 2.2, 20), hiltMat);
+  knee.rotation.x = Math.PI / 2; knee.position.copy(bend); knee.castShadow = true; guard.add(knee);
+  // raised rib down the middle of the arm and a ring on the foot, as on the print
+  const rib = place(new THREE.BoxGeometry(ARM - 34, 5, 1.6), bend.clone().addScaledVector(armDir, ARM / 2 - 4), armDir);
+  rib.material = hiltLite; rib.matrix.multiply(new THREE.Matrix4().makeTranslation(0, 0, GT / 2)); guard.add(rib);
+  const ringGeo = new THREE.TorusGeometry(12, 1.1, 8, 40);
+  const ringOn = place(ringGeo, bend.clone().addScaledVector(footDir, FOOT - GW / 2), footDir); ringOn.material = hiltLite;
+  ringOn.matrix.multiply(new THREE.Matrix4().makeTranslation(0, 0, -GT / 2)); guard.add(ringOn);
+  standIn.add(guard);
 
   // LED strip on the core's edge (bought part): a thin ribbon that can be drawn on
   const ledCurve = new THREE.CatmullRomCurve3(meta.led.map((p) => new THREE.Vector3(p[0], p[1] + Math.sign(p[1]) * 0.9, 0)), false, 'catmullrom', 0.0);
