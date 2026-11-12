@@ -135,7 +135,7 @@ left = dry + wet + signal.fftconvolve(wet + dry * 0.12, room(1))[:N] * 0.75
 right = dry + wet + signal.fftconvolve(wet + dry * 0.12, room(2))[:N] * 0.75
 st = np.stack([left, right], axis=1)
 st = np.tanh(st * 1.15)
-st = st / np.abs(st).max() * 0.80
+st = st / np.abs(st).max() * 0.66
 os.makedirs(os.path.join(HERE, "..", "assets"), exist_ok=True)
 with wave.open(os.path.join(HERE, "..", "assets", "sfx.wav"), "wb") as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((st * 32767).astype("<i2").tobytes())
