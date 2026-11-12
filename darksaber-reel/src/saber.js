@@ -71,19 +71,23 @@ export function buildSaber({ meta, geo }) {
   // stand-ins -------------------------------------------------------------------------------
   const standIn = new THREE.Group(); standIn.name = 'hilt_stand_in'; inner.add(standIn);
   const grip = new THREE.Group(), pommel = new THREE.Group(); standIn.add(grip, pommel);
-  const oct = (parent, x0, x1, hy, hz, mat) => {            // octagonal bar along x
+  const oct = (parent, x0, x1, hy, hz, mat, cy = 0) => {    // octagonal bar along x, centred on y = cy
     const g = new THREE.CylinderGeometry(1, 1, x1 - x0, 8, 1); g.rotateY(Math.PI / 8); g.rotateZ(Math.PI / 2);
     const k = Math.cos(Math.PI / 8); g.scale(1, hy / k, hz / k);
-    const m = new THREE.Mesh(g, mat); m.position.set((x0 + x1) / 2, 0, 0); m.castShadow = m.receiveShadow = true; parent.add(m); return m;
+    const m = new THREE.Mesh(g, mat); m.position.set((x0 + x1) / 2, cy, 0); m.castShadow = m.receiveShadow = true; parent.add(m); return m;
   };
-  oct(grip, -118, 8, 15, 12.6, hiltMat);
-  for (const z of [12.9, -12.9]) for (const [x0, x1, y] of [[-104, -8, 6.5], [-92, -8, 0], [-80, -8, -6.5]]) {
-    const st = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 1.6, 0.9), hiltLite); st.position.set((x0 + x1) / 2, y, z); grip.add(st);
+  // The handle is not coaxial with the blade: on the print its underside runs level with the
+  // emitter's and its top sits lower.  It also plugs into the emitter's socket (S 5-30), which is
+  // what fills the wedge under the emitter's slanted rear face.
+  const HY = 18, HCY = -4;
+  oct(grip, -118, 31, HY, 12.6, hiltMat, HCY);
+  for (const z of [12.9, -12.9]) for (const [x0, x1, y] of [[-104, -14, 7.5], [-92, -10, 0], [-80, -6, -7.5]]) {
+    const st = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 1.8, 0.9), hiltLite); st.position.set((x0 + x1) / 2, y + HCY, z); grip.add(st);
   }
-  oct(pommel, -214, -118, 13.2, 11, hiltMat);                        // ringed section's core
-  for (let i = 0; i < 7; i++) oct(pommel, -211 + i * 13.4, -211 + i * 13.4 + 8.6, 17, 14.6, i % 2 ? hiltMat : hiltLite);
-  { const g = new THREE.CylinderGeometry(0.62, 1, 16, 8, 1); g.rotateY(Math.PI / 8); g.rotateZ(Math.PI / 2); const k = Math.cos(Math.PI / 8); g.scale(1, 16 / k, 13.4 / k);
-    const m = new THREE.Mesh(g, hiltMat); m.position.set(-221, 0, 0); m.castShadow = true; pommel.add(m); }
+  oct(pommel, -214, -116, HY - 2, 11, hiltMat, HCY);                 // ringed section's core (overlaps the grip: no seam)
+  for (let i = 0; i < 7; i++) oct(pommel, -211 + i * 13.4, -211 + i * 13.4 + 8.6, HY + 1.8, 14.6, i % 2 ? hiltMat : hiltLite, HCY);
+  { const g = new THREE.CylinderGeometry(0.62, 1, 16, 8, 1); g.rotateY(Math.PI / 8); g.rotateZ(Math.PI / 2); const k = Math.cos(Math.PI / 8); g.scale(1, (HY - 1) / k, 13.4 / k);
+    const m = new THREE.Mesh(g, hiltMat); m.position.set(-221, HCY, 0); m.castShadow = true; pommel.add(m); }
   // guard: the L-shaped piece.  A flat arm lies along the emitter's slanted rear face, from
   // above the hilt down past its underside, then bends forward into a rounded foot.
   // Proportions measured off the owner's photo of the printed hilt (side view).
@@ -98,7 +102,7 @@ export function buildSaber({ meta, geo }) {
     const m = new THREE.Mesh(geo, hiltMat), z = new THREE.Vector3(0, 0, 1), n = new THREE.Vector3().crossVectors(dir, z);
     m.matrixAutoUpdate = false; m.matrix.makeBasis(dir, z, n).setPosition(origin); m.castShadow = m.receiveShadow = true; return m;
   };
-  const bend = new THREE.Vector3(28, -33, 0);
+  const bend = new THREE.Vector3(34.6, -34.4, 0);        // arm's front surface touches the emitter's rear face all the way down
   const armDir = new THREE.Vector3(-30, 51.2, 0).normalize();                      // up and back, 59.6 deg to the axis
   const footDir = new THREE.Vector3(Math.cos(-0.16), Math.sin(-0.16), 0);          // forward, dipping 9 deg
   const guard = new THREE.Group();
