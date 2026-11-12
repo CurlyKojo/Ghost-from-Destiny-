@@ -394,20 +394,20 @@ export function create2D(canvas, O, T, scale) {
   function title(t, flick) {
     const s = t - T.title; if (s < 0) return;
     const k = back(s / 0.26, 1.3), a = clamp(s / 0.06);
-    const g = ctx.createLinearGradient(0, 1040, 0, 1620); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.35, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0.72)');
-    ctx.save(); ctx.globalAlpha = clamp(s / 0.2); ctx.fillStyle = g; ctx.fillRect(0, 1040, W, 700); ctx.restore();
-    ctx.save(); ctx.translate(540, 1290); const sc = lerp(1.32, 1, k); ctx.scale(sc, sc); ctx.translate(-540, -1290);
+    const g = ctx.createLinearGradient(0, 960, 0, 1920); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.25, 'rgba(0,0,0,0.5)'); g.addColorStop(0.6, 'rgba(0,0,0,0.72)'); g.addColorStop(1, 'rgba(0,0,0,0.8)');
+    ctx.save(); ctx.globalAlpha = clamp(s / 0.2); ctx.fillStyle = g; ctx.fillRect(0, 960, W, 960); ctx.restore();
+    ctx.save(); ctx.translate(540, 1235); const sc = lerp(1.32, 1, k); ctx.scale(sc, sc); ctx.translate(-540, -1235);
     const sp = lerp(44, 5, easeOut(s / 0.3));
     ctx.font = anton(238); ctx.letterSpacing = '5px'; const FS = Math.floor(238 * 950 / ctx.measureText('DARK SABER').width); ctx.letterSpacing = '0px';
-    if (s < 0.1) for (const [dx, col] of [[-10, 'rgba(120,200,255,0.8)'], [10, 'rgba(255,255,255,0.6)']]) text('DARK SABER', 540 + dx * (1 - s / 0.1) + sp / 2, 1290, anton(FS), { align: 'center', spacing: sp, color: col, alpha: a });
+    if (s < 0.1) for (const [dx, col] of [[-10, 'rgba(120,200,255,0.8)'], [10, 'rgba(255,255,255,0.6)']]) text('DARK SABER', 540 + dx * (1 - s / 0.1) + sp / 2, 1235, anton(FS), { align: 'center', spacing: sp, color: col, alpha: a });
     ctx.shadowColor = 'rgba(190,225,255,0.55)'; ctx.shadowBlur = 34 + 16 * flick;
-    text('DARK SABER', 540 + sp / 2, 1290, anton(FS), { align: 'center', spacing: sp, alpha: a, color: '#ffffff' });
+    text('DARK SABER', 540 + sp / 2, 1235, anton(FS), { align: 'center', spacing: sp, alpha: a, color: '#ffffff' });
     ctx.restore();
     const s2 = t - T.sub;
     if (s2 > 0) {
       const a2 = smooth(s2 / 0.3), w = 250 * easeOut(s2 / 0.4);
-      ctx.save(); ctx.globalAlpha = a2 * 0.8; ctx.fillStyle = ICE; ctx.fillRect(540 - w, 1338, w * 2, 2); ctx.restore();
-      text('UPCOMING PROJECT', 540 + 8, 1402 + (1 - a2) * 16, inter(40, 700), { align: 'center', spacing: 16, alpha: a2, color: '#e8f2ff' });
+      ctx.save(); ctx.globalAlpha = a2 * 0.8; ctx.fillStyle = ICE; ctx.fillRect(540 - w, 1283, w * 2, 2); ctx.restore();
+      text('UPCOMING PROJECT', 540 + 8, 1347 + (1 - a2) * 16, inter(40, 700), { align: 'center', spacing: 16, alpha: a2, color: '#e8f2ff' });
     }
   }
 
